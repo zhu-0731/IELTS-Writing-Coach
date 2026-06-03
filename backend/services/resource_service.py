@@ -20,6 +20,8 @@ def extract_and_save(
         name = (fix.get("resource_name") or "").strip()
         resource_type = (fix.get("resource_type") or "expression").strip()
         problem = (fix.get("problem") or "").strip()
+        # resource_goal is the learning objective; fall back to problem for old data
+        goal = (fix.get("resource_goal") or problem or "从诊断提炼的改写建议").strip()
 
         if not suggestion or not name:
             continue
@@ -48,7 +50,7 @@ def extract_and_save(
                 resource_id,
                 resource_type,
                 name,
-                problem or "从诊断提炼的改写建议",
+                goal,
                 suggestion,
                 json.dumps([]),
                 json.dumps([]),

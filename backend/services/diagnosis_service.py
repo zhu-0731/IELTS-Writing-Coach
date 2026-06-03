@@ -51,9 +51,10 @@ def run_diagnosis(
   "top_sentence_fixes": [
     {{
       "original": "原文中的问题句子（原样保留，英文）",
-      "problem": "这句话的问题说明（中文）",
+      "problem": "这句话的问题说明（中文，1句话）",
       "suggestion": "改写后的完整英文句子，可直接替换原句",
-      "resource_name": "可从此改写中提炼的语言资源名称（中文，10字内）",
+      "resource_name": "提炼的语言技巧名称，聚焦技巧本身而非话题，如'形容词短语描述状态'、'三步因果链推进论点'（中文，15字内）",
+      "resource_goal": "掌握这条资源后能做什么，如'用形容词替代动词短语，使表达更地道简洁'（中文，20字内）",
       "resource_type": "expression / pattern / collocation 三选一"
     }}
   ],
