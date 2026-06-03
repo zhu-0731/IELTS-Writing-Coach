@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { runDiagnosis, type DiagnosisResult } from '../../api/client'
 import { copy } from '../../i18n'
 import Button from '../ui/Button'
-import Badge from '../ui/Badge'
 
 const c = copy.workspace.diagModal
 

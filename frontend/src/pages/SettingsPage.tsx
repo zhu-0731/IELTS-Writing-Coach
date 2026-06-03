@@ -3,6 +3,8 @@ import { getSettings, saveSettings, resetAllData, type SettingsData, type Settin
 import { copy } from '../i18n'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
+import ModelSelect from '../components/ui/ModelSelect'
+import { detectProvider, type ProviderPreset } from '../lib/modelPresets'
 
 type Status = 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 
@@ -89,6 +91,7 @@ export default function SettingsPage() {
   const [showReset, setShowReset] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState<SettingsData | null>(null)
+  const [detected, setDetected] = useState<ProviderPreset | null>(null)
 
   const [form, setForm] = useState({
     provider: 'openai_compatible',
@@ -99,6 +102,12 @@ export default function SettingsPage() {
     temperature: 0.7,
     max_tokens: 2048,
   })
+
+  function updateDetected(url: string) {
+    const preset = detectProvider(url)
+    setDetected(preset)
+    return preset
+  }
 
   useEffect(() => {
     getSettings()
@@ -114,6 +123,7 @@ export default function SettingsPage() {
           max_tokens: s.max_tokens,
           api_key: '',
         }))
+        updateDetected(s.base_url)
         setStatus('idle')
       })
       .catch(() => {
@@ -174,16 +184,35 @@ export default function SettingsPage() {
                 <input
                   className={inputCls}
                   value={form.base_url}
-                  onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
+                  onChange={(e) => {
+                    const url = e.target.value
+                    const preset = updateDetected(url)
+                    setForm((f) => ({
+                      ...f,
+                      base_url: url,
+                      ...(preset && f.model_name === '' && preset.supportsVisionDefault !== undefined
+                        ? { supports_vision: preset.supportsVisionDefault }
+                        : {}),
+                    }))
+                  }}
                   placeholder={c.api.baseUrlPlaceholder}
                 />
               </FieldRow>
 
               <FieldRow label={c.api.modelName}>
-                <input
-                  className={inputCls}
+                <ModelSelect
                   value={form.model_name}
-                  onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
+                  onChange={(val, supportsVision) => {
+                    setForm((f) => ({
+                      ...f,
+                      model_name: val,
+                      ...(supportsVision !== undefined
+                        ? { supports_vision: supportsVision }
+                        : {}),
+                    }))
+                  }}
+                  options={detected?.models ?? []}
+                  providerName={detected?.name ?? null}
                   placeholder={c.api.modelPlaceholder}
                 />
               </FieldRow>
