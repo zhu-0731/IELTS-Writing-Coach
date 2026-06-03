@@ -233,3 +233,74 @@ export interface HomeSummary {
 }
 
 export const getHomeSummary = () => request<HomeSummary>('/home/summary')
+
+// Language Resources (templates page)
+export interface ResourceItem {
+  resource_id: string
+  type: string
+  name: string
+  zh_goal: string
+  pattern: string
+  items_json: string
+  zh_logic_chain_json: string
+  common_errors_json: string
+  difficulty: string
+  mastery: string
+  mastery_score: number
+  task_types_json: string
+  source_essay_id: string | null
+  created_at: string
+}
+
+export interface ResourceList {
+  total: number
+  items: ResourceItem[]
+}
+
+export const listResources = (params?: {
+  type?: string
+  mastery?: string
+  task_type?: string
+  limit?: number
+  offset?: number
+}) => {
+  const q = new URLSearchParams()
+  if (params?.type) q.set('type', params.type)
+  if (params?.mastery) q.set('mastery', params.mastery)
+  if (params?.task_type) q.set('task_type', params.task_type)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString()
+  return request<ResourceList>(`/resources${qs ? '?' + qs : ''}`)
+}
+
+// Essays list (history page)
+export interface EssayListItem {
+  essay_id: string
+  task_type: string
+  question_type: string | null
+  prompt: string
+  word_count: number
+  created_at: string
+  updated_at: string
+  diagnosis_id: string | null
+  estimated_band: string | null
+  main_problems_json: string | null
+  next_training_task: string | null
+}
+
+export interface EssayList {
+  total: number
+  items: EssayListItem[]
+}
+
+export const listEssays = (params?: { limit?: number; offset?: number }) => {
+  const q = new URLSearchParams()
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString()
+  return request<EssayList>(`/essays${qs ? '?' + qs : ''}`)
+}
+
+export const getEssayContent = (essayId: string) =>
+  request<EssayData>(`/essays/${essayId}`)
