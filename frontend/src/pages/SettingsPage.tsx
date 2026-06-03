@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import { getSettings, saveSettings, resetAllData, type SettingsData, type SettingsWrite } from '../api/client'
+import { copy } from '../i18n'
+import Card from '../components/ui/Card'
+import Button from '../components/ui/Button'
 
 type Status = 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 
-const RESET_CONFIRM_PHRASE = 'reset my data'
+const c = copy.settings
+const RESET_CONFIRM_PHRASE = c.reset.phrase
 
 function ResetModal({ onClose }: { onClose: () => void }) {
   const [input, setInput] = useState('')
@@ -19,60 +23,66 @@ function ResetModal({ onClose }: { onClose: () => void }) {
       await resetAllData()
       window.location.replace('/')
     } catch {
-      setErr('清空失败，请确认后端正在运行')
+      setErr(c.reset.error)
       setResetting(false)
     }
   }
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-        <h3 className="text-lg font-bold text-slate-800 mb-2">清空所有数据</h3>
-        <p className="text-sm text-slate-500 mb-1">
-          此操作将删除：问卷设置、所有作文、语言资源、诊断记录。
-        </p>
-        <p className="text-sm text-slate-500 mb-6">
-          <strong>API 配置（Key、模型）不会删除。</strong>删除后将跳回初始设置。
+      <div className="bg-surface rounded-panel shadow-panel w-full max-w-md p-8">
+        <h3 className="text-base font-semibold text-ink mb-2">{c.reset.title}</h3>
+        <p className="text-sm text-dim mb-1">{c.reset.desc1}</p>
+        <p className="text-sm text-dim mb-5">
+          <strong className="font-semibold text-ink">{c.reset.desc2Prefix}</strong> {c.reset.desc3}
         </p>
 
-        <p className="text-sm font-medium text-slate-700 mb-2">
-          请输入以下内容确认：
-          <code className="ml-1 px-2 py-0.5 bg-slate-100 rounded text-red-600 font-mono">
+        <p className="text-sm font-medium text-dim mb-2">
+          {c.reset.confirmInstruction}
+          <code className="ml-1 px-2 py-0.5 bg-muted rounded text-danger font-mono text-xs">
             {RESET_CONFIRM_PHRASE}
           </code>
         </p>
         <input
-          className="w-full px-3 py-2 border-2 border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-red-400 mb-4"
+          className="w-full px-3 py-2 border-2 border-line rounded-input text-sm font-mono focus:outline-none focus:border-danger text-ink mb-4 transition-colors"
           placeholder={RESET_CONFIRM_PHRASE}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           autoFocus
         />
 
-        {err && <p className="text-sm text-red-500 mb-3">{err}</p>}
+        {err && <p className="text-sm text-danger mb-3">{err}</p>}
 
         <div className="flex gap-3 justify-end">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors"
-          >
-            取消
-          </button>
-          <button
+          <Button variant="ghost" onClick={onClose}>{c.reset.cancel}</Button>
+          <Button
+            variant="danger-filled"
             onClick={handleReset}
-            disabled={!confirmed || resetting}
-            className="px-5 py-2 bg-red-500 text-white text-sm font-semibold rounded-xl hover:bg-red-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            loading={resetting}
+            disabled={!confirmed}
           >
-            {resetting ? '清空中…' : '确认清空'}
-          </button>
+            {resetting ? c.reset.confirming : c.reset.confirmBtn}
+          </Button>
         </div>
       </div>
     </div>
   )
 }
+
+function FieldRow({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-ink mb-1">{label}</label>
+      {children}
+      {hint && <p className="mt-1 text-xs text-ghost">{hint}</p>}
+    </div>
+  )
+}
+
+const inputCls = 'w-full px-3 py-2 border border-line rounded-input text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors'
 
 export default function SettingsPage() {
   const [status, setStatus] = useState<Status>('loading')
@@ -80,12 +90,11 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [data, setData] = useState<SettingsData | null>(null)
 
-  // 编辑中的字段（api_key 单独管理，不回显）
   const [form, setForm] = useState({
     provider: 'openai_compatible',
     model_name: '',
     base_url: 'https://api.openai.com/v1',
-    api_key: '',          // 用户输入的新 key（留空=不修改）
+    api_key: '',
     supports_vision: false,
     temperature: 0.7,
     max_tokens: 2048,
@@ -103,12 +112,12 @@ export default function SettingsPage() {
           supports_vision: s.supports_vision,
           temperature: s.temperature,
           max_tokens: s.max_tokens,
-          api_key: '',   // 永远不预填，让用户主动输入才更新
+          api_key: '',
         }))
         setStatus('idle')
       })
       .catch(() => {
-        setError('无法加载设置，请确认后端已启动')
+        setError(c.loadError)
         setStatus('error')
       })
   }, [])
@@ -126,10 +135,7 @@ export default function SettingsPage() {
         temperature: form.temperature,
         max_tokens: form.max_tokens,
       }
-      // 只有用户填了新 key 才更新
-      if (form.api_key.trim()) {
-        payload.api_key = form.api_key.trim()
-      }
+      if (form.api_key.trim()) payload.api_key = form.api_key.trim()
       const updated = await saveSettings(payload)
       setData(updated)
       setForm((f) => ({ ...f, api_key: '' }))
@@ -141,151 +147,122 @@ export default function SettingsPage() {
     }
   }
 
-  function field(label: string, node: React.ReactNode, hint?: string) {
-    return (
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-        {node}
-        {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
-      </div>
-    )
-  }
-
-  const inputCls = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400'
-
   return (
-    <div className="max-w-2xl mx-auto py-10 px-4">
+    <div className="max-w-2xl mx-auto py-10 px-5">
       {showReset && <ResetModal onClose={() => setShowReset(false)} />}
-      <h1 className="text-2xl font-semibold text-slate-800 mb-1">设置</h1>
-      <p className="text-sm text-slate-500 mb-8">
-        配置 AI 模型。API Key 仅存储在本地数据库，不会上传或提交到代码仓库。
-      </p>
 
-      {status === 'loading' && (
-        <p className="text-slate-400 text-sm">加载中…</p>
-      )}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-ink">{c.title}</h1>
+        <p className="text-sm text-dim mt-1">{c.subtitle}</p>
+      </div>
+
+      {status === 'loading' && <p className="text-sm text-ghost">{c.loading}</p>}
 
       {status === 'error' && !data && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600">
+        <div className="bg-danger-light border border-danger/20 rounded-card p-4 text-sm text-danger">
           {error}
         </div>
       )}
 
       {data && (
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* API 配置 */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
-            <h2 className="text-base font-semibold text-slate-700">API 配置</h2>
-
-            {field(
-              'Base URL',
-              <input
-                className={inputCls}
-                value={form.base_url}
-                onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
-                placeholder="https://api.openai.com/v1"
-              />,
-              '支持任意 OpenAI-compatible 接口，包括本地 Ollama、vLLM 等',
-            )}
-
-            {field(
-              'Model Name',
-              <input
-                className={inputCls}
-                value={form.model_name}
-                onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
-                placeholder="gpt-4o-mini"
-              />,
-            )}
-
-            {field(
-              'API Key',
-              <input
-                className={inputCls}
-                type="password"
-                value={form.api_key}
-                onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
-                placeholder={data.api_key_masked ? `已设置（末四位：${data.api_key_masked.replace(/\*/g, '')}****）` : '输入 API Key'}
-                autoComplete="off"
-              />,
-              '留空则不修改已保存的 Key。Key 仅存于本地 SQLite，不出现在代码或日志中。',
-            )}
-          </div>
-
-          {/* 能力配置 */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
-            <h2 className="text-base font-semibold text-slate-700">模型能力</h2>
-
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                className="mt-0.5 accent-blue-500"
-                checked={form.supports_vision}
-                onChange={(e) => setForm((f) => ({ ...f, supports_vision: e.target.checked }))}
-              />
-              <div>
-                <span className="text-sm font-medium text-slate-700">支持多模态图片（Vision）</span>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  开启后可上传题目图片。需要当前模型支持 vision，否则图片将无法识别。
-                </p>
-              </div>
-            </label>
-
-            <div className="grid grid-cols-2 gap-4">
-              {field(
-                '温度参数 (Temperature)',
+        <form onSubmit={handleSave} className="space-y-5">
+          {/* API config */}
+          <Card padding="lg">
+            <h2 className="text-sm font-semibold text-ink mb-5">{c.api.title}</h2>
+            <div className="space-y-4">
+              <FieldRow label={c.api.baseUrl} hint={c.api.baseUrlHint}>
                 <input
                   className={inputCls}
-                  type="number"
-                  min="0" max="2" step="0.1"
-                  value={form.temperature}
-                  onChange={(e) => setForm((f) => ({ ...f, temperature: parseFloat(e.target.value) }))}
-                />,
-              )}
-              {field(
-                '最大输出 Token',
+                  value={form.base_url}
+                  onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
+                  placeholder={c.api.baseUrlPlaceholder}
+                />
+              </FieldRow>
+
+              <FieldRow label={c.api.modelName}>
                 <input
                   className={inputCls}
-                  type="number"
-                  min="256" max="8192" step="128"
-                  value={form.max_tokens}
-                  onChange={(e) => setForm((f) => ({ ...f, max_tokens: parseInt(e.target.value) }))}
-                />,
-              )}
+                  value={form.model_name}
+                  onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
+                  placeholder={c.api.modelPlaceholder}
+                />
+              </FieldRow>
+
+              <FieldRow label={c.api.apiKey} hint={c.api.apiKeyHint}>
+                <input
+                  className={inputCls}
+                  type="password"
+                  value={form.api_key}
+                  onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+                  placeholder={
+                    data.api_key_masked
+                      ? c.api.apiKeySet(data.api_key_masked.replace(/\*/g, ''))
+                      : c.api.apiKeyEmpty
+                  }
+                  autoComplete="off"
+                />
+              </FieldRow>
             </div>
-          </div>
+          </Card>
 
-          {error && (
-            <p className="text-sm text-red-500">{error}</p>
-          )}
+          {/* Capabilities */}
+          <Card padding="lg">
+            <h2 className="text-sm font-semibold text-ink mb-5">{c.capabilities.title}</h2>
+            <div className="space-y-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-brand"
+                  checked={form.supports_vision}
+                  onChange={(e) => setForm((f) => ({ ...f, supports_vision: e.target.checked }))}
+                />
+                <div>
+                  <span className="text-sm font-medium text-ink">{c.capabilities.vision}</span>
+                  <p className="text-xs text-ghost mt-0.5">{c.capabilities.visionHint}</p>
+                </div>
+              </label>
+
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <FieldRow label={c.capabilities.temperature}>
+                  <input
+                    className={inputCls}
+                    type="number" min="0" max="2" step="0.1"
+                    value={form.temperature}
+                    onChange={(e) => setForm((f) => ({ ...f, temperature: parseFloat(e.target.value) }))}
+                  />
+                </FieldRow>
+                <FieldRow label={c.capabilities.maxTokens}>
+                  <input
+                    className={inputCls}
+                    type="number" min="256" max="8192" step="128"
+                    value={form.max_tokens}
+                    onChange={(e) => setForm((f) => ({ ...f, max_tokens: parseInt(e.target.value) }))}
+                  />
+                </FieldRow>
+              </div>
+            </div>
+          </Card>
+
+          {error && <p className="text-sm text-danger">{error}</p>}
 
           <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={status === 'saving'}
-              className="px-6 py-2.5 bg-blue-500 text-white text-sm font-medium rounded-xl hover:bg-blue-600 disabled:opacity-40 transition-colors"
-            >
-              {status === 'saving' ? '保存中…' : '保存设置'}
-            </button>
+            <Button type="submit" variant="primary" loading={status === 'saving'}>
+              {status === 'saving' ? c.saving : c.save}
+            </Button>
             {status === 'saved' && (
-              <span className="text-sm text-green-600">✓ 已保存</span>
+              <span className="text-sm text-ok font-medium">✓ {c.saved}</span>
             )}
           </div>
         </form>
       )}
 
-      {/* 危险区 */}
-      <div className="mt-12 border-t border-red-100 pt-8">
-        <h2 className="text-base font-semibold text-red-600 mb-1">危险操作</h2>
-        <p className="text-sm text-slate-400 mb-4">
-          清空所有学习数据（问卷、作文、诊断记录）。API 配置保留。
-        </p>
-        <button
-          onClick={() => setShowReset(true)}
-          className="px-5 py-2.5 border-2 border-red-300 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-50 transition-colors"
-        >
-          清空数据…
-        </button>
+      {/* Danger zone */}
+      <div className="mt-12 pt-8 border-t border-line">
+        <h2 className="text-sm font-semibold text-danger mb-1">{c.danger.title}</h2>
+        <p className="text-sm text-ghost mb-4">{c.danger.desc}</p>
+        <Button variant="danger" onClick={() => setShowReset(true)}>
+          {c.danger.button}
+        </Button>
       </div>
     </div>
   )

@@ -1,51 +1,50 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveProfile, type ProfileData } from '../api/client'
+import { copy } from '../i18n'
+
+const c = copy.setup
+const opt = copy.setup.options
+const q = copy.setup.questions
 
 const STEPS = [
   {
     key: 'target_band',
-    question: '你的目标雅思写作分数是？',
+    question: q.target_band.q,
     multi: false,
     options: ['5.5', '6.0', '6.5', '7.0+'],
   },
   {
     key: 'main_task',
-    question: '你主要练习哪种题型？',
+    question: q.main_task.q,
     multi: false,
     options: [
-      { label: 'Task 1 小作文', value: 'task1' },
-      { label: 'Task 2 大作文', value: 'task2' },
-      { label: '两个都练', value: 'both' },
+      { label: opt.task1,   value: 'task1' },
+      { label: opt.task2,   value: 'task2' },
+      { label: opt.taskBoth, value: 'both' },
     ],
   },
   {
     key: 'main_problem',
-    question: '写作时你最常卡在哪里？',
-    hint: '可多选',
+    question: q.main_problem.q,
+    hint: q.main_problem.hint,
     multi: true,
-    options: [
-      '不知道写什么',
-      '知道中文但不会英文说',
-      '语法和拼写容易错',
-      '写得太慢',
-      '不知道怎么套模板',
-    ],
+    options: [opt.problem1, opt.problem2, opt.problem3, opt.problem4, opt.problem5],
   },
   {
     key: 'template_style',
-    question: '你希望模板和语言资源的难度偏向？',
+    question: q.template_style.q,
     multi: false,
-    options: ['简单稳妥，少出错', '稍微高级，冲 6.5', '更学术，冲 7+'],
+    options: [opt.styleSafe, opt.styleMid, opt.styleAdv],
   },
   {
     key: 'allow_profile_update',
-    question: '是否允许系统持续学习你的写作习惯？',
-    hint: '开启后，系统会根据你的历史作文持续更新个性化推荐。',
+    question: q.allow_profile_update.q,
+    hint: q.allow_profile_update.hint,
     multi: false,
     options: [
-      { label: '允许，持续学习', value: 'true' },
-      { label: '不允许，只做单次分析', value: 'false' },
+      { label: opt.profileYes, value: 'true' },
+      { label: opt.profileNo,  value: 'false' },
     ],
   },
 ]
@@ -77,17 +76,15 @@ export default function SetupPage({ onComplete }: Props) {
   }
 
   function isSelected(val: string): boolean {
-    if (current.multi) {
-      return (multiAnswers[current.key] ?? []).includes(val)
-    }
-    return answers[current.key] === val
+    return current.multi
+      ? (multiAnswers[current.key] ?? []).includes(val)
+      : answers[current.key] === val
   }
 
   function hasSelection(): boolean {
-    if (current.multi) {
-      return (multiAnswers[current.key] ?? []).length > 0
-    }
-    return !!answers[current.key]
+    return current.multi
+      ? (multiAnswers[current.key] ?? []).length > 0
+      : !!answers[current.key]
   }
 
   function select(val: string) {
@@ -104,10 +101,7 @@ export default function SetupPage({ onComplete }: Props) {
 
   async function next() {
     if (!hasSelection()) return
-    if (!isLast) {
-      setStep((s) => s + 1)
-      return
-    }
+    if (!isLast) { setStep((s) => s + 1); return }
     setSaving(true)
     setError('')
     try {
@@ -122,49 +116,49 @@ export default function SetupPage({ onComplete }: Props) {
       onComplete()
       navigate('/', { replace: true })
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '保存失败，请重试')
+      setError(e instanceof Error ? e.message : c.saveError)
       setSaving(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* 顶部进度条 */}
-      <div className="w-full h-1 bg-slate-200">
+    <div className="min-h-screen bg-canvas flex flex-col">
+      {/* Progress bar */}
+      <div className="w-full h-0.5 bg-line">
         <div
-          className="h-1 bg-blue-500 transition-all duration-500"
+          className="h-0.5 bg-brand transition-all duration-500"
           style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
         />
       </div>
 
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-xl">
-
-          {/* 步骤指示 */}
-          <div className="flex items-center gap-2 mb-8">
+          {/* Step dots */}
+          <div className="flex items-center gap-2 mb-10">
             {STEPS.map((_, i) => (
               <div
                 key={i}
-                className={`h-1.5 rounded-full flex-1 transition-all duration-300 ${
-                  i < step ? 'bg-blue-400' : i === step ? 'bg-blue-500' : 'bg-slate-200'
-                }`}
+                className={[
+                  'h-1 rounded-full flex-1 transition-all duration-300',
+                  i < step ? 'bg-brand-muted' : i === step ? 'bg-brand' : 'bg-line',
+                ].join(' ')}
               />
             ))}
           </div>
 
-          {/* 主卡片 */}
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 px-10 py-12">
-            <p className="text-xs font-semibold text-blue-500 tracking-widest uppercase mb-4">
-              第 {step + 1} 步 / 共 {STEPS.length} 步
+          {/* Card */}
+          <div className="bg-surface rounded-panel shadow-panel border border-line px-10 py-12">
+            <p className="text-[11px] font-semibold text-brand tracking-widest uppercase mb-5">
+              {c.stepLabel(step + 1, STEPS.length)}
             </p>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2 leading-snug">
+            <h2 className="text-2xl font-bold text-ink mb-2 leading-snug">
               {current.question}
             </h2>
             {'hint' in current && current.hint && (
-              <p className="text-sm text-slate-400 mb-8">{current.hint}</p>
+              <p className="text-sm text-ghost mb-8">{current.hint}</p>
             )}
 
-            <div className="space-y-3 mt-8">
+            <div className="space-y-2.5 mt-8">
               {current.options.map((opt) => {
                 const val = getOptionValue(opt)
                 const label = getOptionLabel(opt)
@@ -173,22 +167,24 @@ export default function SetupPage({ onComplete }: Props) {
                   <button
                     key={val}
                     onClick={() => select(val)}
-                    className={`w-full text-left px-5 py-4 rounded-2xl border-2 text-sm font-medium transition-all ${
+                    className={[
+                      'w-full text-left px-5 py-3.5 rounded-card border-2 text-sm font-medium transition-all',
                       sel
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-slate-100 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white'
-                    }`}
+                        ? 'border-brand bg-brand-light text-brand'
+                        : 'border-line bg-canvas text-dim hover:border-line/80 hover:bg-muted',
+                    ].join(' ')}
                   >
-                    <span className={`inline-flex items-center justify-center w-4 h-4 mr-3 align-middle transition-all border-2 ${
+                    <span className={[
+                      'inline-flex items-center justify-center w-4 h-4 mr-3 align-middle border-2 transition-all shrink-0',
                       current.multi
-                        ? `rounded ${sel ? 'border-blue-500 bg-blue-500' : 'border-slate-300'}`
-                        : `rounded-full ${sel ? 'border-blue-500 bg-blue-500' : 'border-slate-300'}`
-                    }`}>
+                        ? `rounded ${sel ? 'border-brand bg-brand' : 'border-line'}`
+                        : `rounded-full ${sel ? 'border-brand bg-brand' : 'border-line'}`,
+                    ].join(' ')}>
                       {sel && (
                         <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10">
                           {current.multi
-                            ? <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            : <circle cx="5" cy="5" r="2.5" fill="currentColor"/>
+                            ? <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            : <circle cx="5" cy="5" r="2.5" fill="currentColor" />
                           }
                         </svg>
                       )}
@@ -199,35 +195,34 @@ export default function SetupPage({ onComplete }: Props) {
               })}
             </div>
 
-            {error && (
-              <p className="mt-5 text-sm text-red-500">{error}</p>
-            )}
+            {error && <p className="mt-5 text-sm text-danger">{error}</p>}
           </div>
 
-          {/* 导航按钮 */}
+          {/* Navigation */}
           <div className="flex items-center justify-between mt-6 px-1">
             {step > 0 ? (
               <button
                 onClick={() => setStep((s) => s - 1)}
-                className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-sm text-ghost hover:text-dim transition-colors"
               >
-                ← 上一步
+                {c.prev}
               </button>
-            ) : (
-              <div />
-            )}
+            ) : <div />}
             <button
               onClick={next}
               disabled={!hasSelection() || saving}
-              className="px-7 py-3 bg-blue-500 text-white text-sm font-semibold rounded-2xl hover:bg-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+              className={[
+                'px-7 py-3 text-sm font-semibold rounded-panel transition-all',
+                'bg-brand text-white hover:bg-brand-hover',
+                'disabled:opacity-30 disabled:cursor-not-allowed',
+                'shadow-sm',
+              ].join(' ')}
             >
-              {saving ? '保存中…' : isLast ? '完成设置 ✓' : '下一步 →'}
+              {saving ? c.saving : isLast ? `${c.finish} ✓` : `${c.next} →`}
             </button>
           </div>
 
-          <p className="mt-8 text-center text-xs text-slate-300">
-            IELTS Writing Coach · 开源个人写作训练工具
-          </p>
+          <p className="mt-8 text-center text-xs text-ghost/60">{c.footer}</p>
         </div>
       </div>
     </div>

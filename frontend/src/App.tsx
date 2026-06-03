@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { getProfileStatus } from './api/client'
+import { copy } from './i18n'
 import TopNav from './components/nav/TopNav'
+import Button from './components/ui/Button'
 import SetupPage from './pages/SetupPage'
 import HomePage from './pages/HomePage'
 import WorkspacePage from './pages/WorkspacePage'
@@ -11,9 +13,11 @@ import SettingsPage from './pages/SettingsPage'
 
 type InitState = 'loading' | 'setup_needed' | 'ready' | 'backend_down'
 
+const c = copy.app
+
 function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-canvas">
       <TopNav />
       <main className="flex-1">{children}</main>
     </div>
@@ -33,10 +37,10 @@ export default function App() {
 
   if (init === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-canvas">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-slate-400">正在连接服务…</p>
+          <div className="w-7 h-7 border-2 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-ghost">{c.loading}</p>
         </div>
       </div>
     )
@@ -44,27 +48,19 @@ export default function App() {
 
   if (init === 'backend_down') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 max-w-md text-center">
+      <div className="min-h-screen flex items-center justify-center bg-canvas p-4">
+        <div className="bg-surface rounded-panel shadow-panel border border-line p-8 max-w-md w-full text-center">
           <div className="text-3xl mb-4">⚠️</div>
-          <h2 className="text-lg font-semibold text-slate-800 mb-2">无法连接后端服务</h2>
-          <p className="text-sm text-slate-500 mb-4">
-            请先启动后端服务，然后刷新页面。
-          </p>
-          <div className="bg-slate-50 rounded-xl p-4 text-left text-xs font-mono text-slate-600 space-y-1">
-            <p># 进入后端目录</p>
-            <p>cd backend</p>
-            <p># 激活虚拟环境（Windows）</p>
-            <p>.venv\Scripts\activate</p>
-            <p># 启动服务</p>
-            <p>uvicorn main:app --reload</p>
+          <h2 className="text-lg font-semibold text-ink mb-2">{c.backendDown.title}</h2>
+          <p className="text-sm text-dim mb-5">{c.backendDown.desc}</p>
+          <div className="bg-muted rounded-card p-4 text-left text-xs font-mono text-dim space-y-1 mb-5">
+            {c.backendDown.cmds.map((line, i) => (
+              <p key={i} className={line.startsWith('#') ? 'text-ghost' : ''}>{line}</p>
+            ))}
           </div>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-5 px-5 py-2 bg-blue-500 text-white text-sm rounded-xl hover:bg-blue-600 transition-colors"
-          >
-            重新连接
-          </button>
+          <Button variant="primary" onClick={() => window.location.reload()}>
+            {c.backendDown.retry}
+          </Button>
         </div>
       </div>
     )
@@ -73,7 +69,6 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* 首次设置页（无顶部导航） */}
         <Route
           path="/setup"
           element={
@@ -83,17 +78,16 @@ export default function App() {
           }
         />
 
-        {/* 需要设置完成才能访问的页面 */}
         {init === 'setup_needed' ? (
           <Route path="*" element={<Navigate to="/setup" replace />} />
         ) : (
           <>
-            <Route path="/" element={<MainLayout><HomePage /></MainLayout>} />
+            <Route path="/"          element={<MainLayout><HomePage /></MainLayout>} />
             <Route path="/workspace" element={<MainLayout><WorkspacePage /></MainLayout>} />
             <Route path="/templates" element={<MainLayout><TemplatesPage /></MainLayout>} />
-            <Route path="/history" element={<MainLayout><HistoryPage /></MainLayout>} />
-            <Route path="/settings" element={<MainLayout><SettingsPage /></MainLayout>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/history"   element={<MainLayout><HistoryPage /></MainLayout>} />
+            <Route path="/settings"  element={<MainLayout><SettingsPage /></MainLayout>} />
+            <Route path="*"          element={<Navigate to="/" replace />} />
           </>
         )}
       </Routes>
