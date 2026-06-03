@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   getPracticeSession,
   completePracticeSession,
@@ -252,9 +252,16 @@ function ResultsScreen({
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PracticePage() {
   const { sessionId } = useParams<{ sessionId: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
+  const isNew = sessionId === 'new'
+  const genEssayId = searchParams.get('essay') ?? ''
+  const genMode = searchParams.get('mode') ?? 'cloze'
+
   const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(isNew)
+  const [genError, setGenError] = useState('')
   const [error, setError] = useState('')
   const [session, setSession] = useState<PracticeSession | null>(null)
 
@@ -269,7 +276,34 @@ export default function PracticePage() {
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
 
+  // Generate a fresh session (used when navigated to /practice/new?essay=...)
+  const doGenerate = () => {
+    if (!genEssayId) {
+      setGenError(c.genError)
+      setGenerating(false)
+      return
+    }
+    setGenerating(true)
+    setGenError('')
+    generatePractice({ essay_id: genEssayId, mode: genMode })
+      .then((res) => {
+        // Replace the URL with the real session id; the effect below loads it.
+        navigate(`/practice/${res.session_id}`, { replace: true })
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : ''
+        // Surface the backend's Chinese message when present (422 ... detail)
+        const detail = msg.replace(/^\d+\s*/, '').trim()
+        setGenError(detail && detail.length < 80 ? detail : c.genError)
+        setGenerating(false)
+      })
+  }
+
   useEffect(() => {
+    if (isNew) {
+      doGenerate()
+      return
+    }
     if (!sessionId) return
     getPracticeSession(sessionId)
       .then((data) => {
@@ -281,6 +315,7 @@ export default function PracticePage() {
         setError(c.loadError)
         setLoading(false)
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
   // Focus input when item changes
@@ -334,6 +369,39 @@ export default function PracticePage() {
       if (!submitted && inputValue.trim()) handleSubmit()
       else if (submitted) handleNext()
     }
+  }
+
+  // ── Generating a new session ─────────────────────────────────────────────
+  if (isNew && generating) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+        <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-medium text-ink">{c.generating}</p>
+        <p className="text-xs text-ghost">通常需要 10-20 秒</p>
+      </div>
+    )
+  }
+
+  if (isNew && genError) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-sm text-danger max-w-sm leading-relaxed">{genError}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 text-sm text-ghost hover:text-dim border border-line rounded-btn transition-colors"
+          >
+            {c.back}
+          </button>
+          <button
+            onClick={doGenerate}
+            className="px-4 py-2 text-sm font-medium rounded-btn bg-brand text-white hover:bg-brand-hover transition-colors"
+          >
+            {c.retry}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // ── Loading ────────────────────────────────────────────────────────────────

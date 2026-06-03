@@ -32,7 +32,10 @@ def generate(body: GenerateRequest):
         if not cfg or not cfg["api_key"]:
             raise HTTPException(400, "请先在设置页配置 API Key")
         provider = make_provider_from_db(cfg)
-        result = generate_practice(provider, conn, body.essay_id, body.mode)
+        try:
+            result = generate_practice(provider, conn, body.essay_id, body.mode)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
         return result
     finally:
         conn.close()
