@@ -160,3 +160,76 @@ export interface ExpressionResult {
 
 export const generateExpression = (data: { chinese_text: string; task_type: string }) =>
   request<ExpressionResult>('/coach/expression', { method: 'POST', body: JSON.stringify(data) })
+
+// Diagnosis
+export interface DiagnosisProblem {
+  category: string
+  issue: string
+  severity: 'high' | 'medium'
+}
+
+export interface DiagnosisFix {
+  original: string
+  problem: string
+  suggestion: string
+  resource_name: string
+  resource_type: string
+}
+
+export interface DiagnosisResult {
+  diagnosis_id: string
+  estimated_band: string
+  main_problems: DiagnosisProblem[]
+  top_sentence_fixes: DiagnosisFix[]
+  template_misuse: string
+  next_training_task: string
+  saved_resource_count: number
+}
+
+export const runDiagnosis = (data: {
+  essay_id?: string | null
+  task_type: string
+  question_type: string
+  prompt: string
+  content: string
+}) => request<DiagnosisResult>('/diagnosis/full', { method: 'POST', body: JSON.stringify(data) })
+
+// Home summary
+export interface HomeResource {
+  resource_id: string
+  type: string
+  name: string
+  zh_goal: string
+  mastery: string
+  mastery_score: number
+}
+
+export interface HomeProblemStat {
+  category: string
+  count: number
+}
+
+export interface HomeSummary {
+  profile: {
+    target_band: string
+    main_task: string
+    main_problem: string
+    template_style: string
+    allow_profile_update: boolean
+  } | null
+  api_configured: boolean
+  recent_diagnosis: {
+    diagnosis_id: string
+    essay_id: string
+    estimated_band: string
+    main_problems: DiagnosisProblem[]
+    next_training_task: string
+    created_at: string
+  } | null
+  recent_resources: HomeResource[]
+  problem_stats: HomeProblemStat[]
+  essay_count: number
+  diagnosis_count: number
+}
+
+export const getHomeSummary = () => request<HomeSummary>('/home/summary')
