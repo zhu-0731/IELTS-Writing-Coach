@@ -192,6 +192,7 @@ export const runDiagnosis = (data: {
   question_type: string
   prompt: string
   content: string
+  image_base64?: string
 }) => request<DiagnosisResult>('/diagnosis/full', { method: 'POST', body: JSON.stringify(data) })
 
 // Home summary

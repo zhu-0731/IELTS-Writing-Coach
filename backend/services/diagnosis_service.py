@@ -7,6 +7,7 @@ def run_diagnosis(
     prompt: str,
     task_type: str,
     question_type: str,
+    image_base64: str | None = None,
 ) -> dict:
     task_label = (
         "Task 1 小作文（图表 / 流程 / 地图描述）"
@@ -66,10 +67,20 @@ def run_diagnosis(
 - suggestion 必须是完整英文句子，学生可直接替换到作文中
 - 若作文内容为空或不足 30 词，estimated_band 返回 "N/A" 并说明原因"""
 
+    if image_base64:
+        # Strip data URL prefix if present (data:image/jpeg;base64,...)
+        b64 = image_base64.split(",", 1)[-1]
+        user_content: str | list = [
+            {"type": "text", "text": user},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+        ]
+    else:
+        user_content = user
+
     result = provider.chat_json(
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "user", "content": user_content},
         ],
         schema={},
         temperature=0.4,

@@ -40,6 +40,7 @@ export default function WorkspacePage() {
   const [rightWidth, setRightWidth] = useState(340)
   const [isResizing, setIsResizing] = useState(false)
 
+  const [promptImage, setPromptImage] = useState<string | null>(null)
   const [essayId, setEssayId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -165,6 +166,7 @@ export default function WorkspacePage() {
     setQuestionType('')
     setPrompt('')
     setContent('')
+    setPromptImage(null)
     setEssayId(null)
     setElapsed(0)
     setTimerRunning(false)
@@ -263,9 +265,11 @@ export default function WorkspacePage() {
             taskType={taskType}
             questionType={questionType}
             prompt={prompt}
+            promptImage={promptImage}
             onTaskChange={switchTask}
             onQuestionTypeChange={setQuestionType}
             onPromptChange={setPrompt}
+            onImageChange={setPromptImage}
           />
         </div>
 
@@ -358,6 +362,7 @@ export default function WorkspacePage() {
           taskType={taskType}
           questionType={questionType}
           prompt={prompt}
+          promptImage={promptImage}
           content={content}
           wordCount={wordCount}
           onClose={() => setShowDiagModal(false)}
