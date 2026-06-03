@@ -11,6 +11,7 @@ from routers import coach as coach_router
 from routers import diagnosis as diagnosis_router
 from routers import home as home_router
 from routers import resources as resources_router
+from routers import practice as practice_router
 
 app = FastAPI(title="IELTS Writing Coach API", version="0.1.0")
 
@@ -31,6 +32,7 @@ app.include_router(coach_router.router)
 app.include_router(diagnosis_router.router)
 app.include_router(home_router.router)
 app.include_router(resources_router.router)
+app.include_router(practice_router.router)
 
 
 @app.on_event("startup")

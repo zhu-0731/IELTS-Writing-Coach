@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getHomeSummary, type HomeSummary } from '../api/client'
+import { getHomeSummary, listPracticeSessions, type HomeSummary, type PracticeSessionSummary } from '../api/client'
 import { copy } from '../i18n'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -16,12 +16,16 @@ const MASTERY_VARIANT: Record<string, 'neutral' | 'blue' | 'yellow' | 'green' | 
   mastered: 'green',
 }
 
+const cp = copy.practice
+
 export default function HomePage() {
   const navigate = useNavigate()
   const [summary, setSummary] = useState<HomeSummary | null>(null)
+  const [sessions, setSessions] = useState<PracticeSessionSummary[]>([])
 
   useEffect(() => {
     getHomeSummary().then(setSummary).catch(() => {})
+    listPracticeSessions(5).then(setSessions).catch(() => {})
   }, [])
 
   const profile = summary?.profile ?? null
@@ -241,6 +245,51 @@ export default function HomePage() {
           )}
         </Card>
       </div>
+
+      {/* Row 3: Recent practice sessions */}
+      {sessions.length > 0 && (
+        <div className="mt-5">
+          <Card padding="lg">
+            <h2 className="text-sm font-semibold text-ink mb-4">{cp.recentTitle}</h2>
+            <div className="space-y-2.5">
+              {sessions.map((s) => {
+                const pct = s.total > 0 ? Math.round((s.score / s.total) * 100) : null
+                const taskLabel = s.task_type === 'task1' ? 'Task 1' : 'Task 2'
+                const promptExcerpt = s.prompt ? s.prompt.slice(0, 60) + (s.prompt.length > 60 ? '…' : '') : '（无题目）'
+                const modeLabel = cp.modeLabel[s.mode as keyof typeof cp.modeLabel] ?? s.mode
+                return (
+                  <div
+                    key={s.session_id}
+                    className="flex items-center gap-3 p-3 rounded-card bg-muted hover:bg-line/50 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/practice/${s.session_id}`)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                        <span className="text-[10px] text-ghost bg-surface px-1.5 py-0.5 rounded font-medium">{taskLabel}</span>
+                        <span className="text-[10px] text-ghost">{modeLabel}</span>
+                        <span className={`text-[10px] font-medium ${s.status === 'completed' ? 'text-ok' : 'text-warn'}`}>
+                          {s.status === 'completed' ? cp.completed : cp.inProgress}
+                        </span>
+                      </div>
+                      <p className="text-xs text-dim truncate">{promptExcerpt}</p>
+                    </div>
+                    {s.status === 'completed' && pct !== null ? (
+                      <div className="shrink-0 text-right">
+                        <span className={`text-sm font-bold tabular-nums ${pct >= 70 ? 'text-ok' : pct >= 50 ? 'text-warn' : 'text-danger'}`}>
+                          {pct}%
+                        </span>
+                        <p className="text-[10px] text-ghost">{s.score}/{s.total}</p>
+                      </div>
+                    ) : (
+                      <span className="shrink-0 text-xs text-brand font-medium">{cp.continueBtn} →</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
