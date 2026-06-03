@@ -3,6 +3,7 @@ import { createEssay, updateEssay } from '../api/client'
 import { copy } from '../i18n'
 import PromptPanel from '../components/workspace/PromptPanel'
 import AISidebar from '../components/workspace/AISidebar'
+import DiagnosisModal from '../components/workspace/DiagnosisModal'
 import Button from '../components/ui/Button'
 
 type TaskType = 'task1' | 'task2'
@@ -352,30 +353,15 @@ export default function WorkspacePage() {
 
       {/* ── Diagnosis modal ───────────────────────────────────────── */}
       {showDiagModal && (
-        <div
-          className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowDiagModal(false) }}
-        >
-          <div className="bg-surface rounded-panel shadow-panel w-full max-w-lg p-8">
-            <h3 className="text-lg font-semibold text-ink mb-2">{c.diagModal.title}</h3>
-            <p className="text-sm text-dim mb-6 leading-relaxed">{c.diagModal.desc}</p>
-
-            <div className="bg-muted rounded-card p-4 text-sm text-dim space-y-1.5">
-              <p>{c.diagModal.wordCount(wordCount)}</p>
-              {essayId && (
-                <p className="text-xs text-ghost font-mono">
-                  {c.diagModal.draftId}：{essayId}
-                </p>
-              )}
-            </div>
-
-            <div className="flex justify-end mt-6">
-              <Button variant="primary" onClick={() => setShowDiagModal(false)}>
-                {c.diagModal.close}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DiagnosisModal
+          essayId={essayId}
+          taskType={taskType}
+          questionType={questionType}
+          prompt={prompt}
+          content={content}
+          wordCount={wordCount}
+          onClose={() => setShowDiagModal(false)}
+        />
       )}
     </div>
   )
