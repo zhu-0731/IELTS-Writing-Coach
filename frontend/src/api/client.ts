@@ -65,3 +65,37 @@ export const saveSettings = (data: SettingsWrite) =>
 // Data reset
 export const resetAllData = () =>
   request<{ ok: boolean }>('/data/reset', { method: 'POST' })
+
+// Essays
+export interface EssayData {
+  essay_id: string
+  task_type: string
+  question_type: string | null
+  prompt: string
+  content: string
+  word_count: number
+  topic_tags_json: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EssayCreate {
+  task_type: string
+  question_type?: string
+  prompt?: string
+  content?: string
+  word_count?: number
+}
+
+export interface EssayUpdate {
+  question_type?: string
+  prompt?: string
+  content?: string
+  word_count?: number
+}
+
+export const createEssay = (data: EssayCreate) =>
+  request<EssayData>('/essays', { method: 'POST', body: JSON.stringify(data) })
+
+export const updateEssay = (id: string, data: EssayUpdate) =>
+  request<EssayData>(`/essays/${id}`, { method: 'PUT', body: JSON.stringify(data) })
