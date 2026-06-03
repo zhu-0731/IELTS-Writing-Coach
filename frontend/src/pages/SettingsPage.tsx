@@ -23,6 +23,7 @@ function ResetModal({ onClose }: { onClose: () => void }) {
     setErr('')
     try {
       await resetAllData()
+      sessionStorage.clear()
       window.location.replace('/')
     } catch {
       setErr(c.reset.error)

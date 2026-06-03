@@ -320,3 +320,9 @@ export const listEssays = (params?: { limit?: number; offset?: number }) => {
 
 export const getEssayContent = (essayId: string) =>
   request<EssayData>(`/essays/${essayId}`)
+
+export const deleteEssay = (essayId: string) =>
+  fetch(`${BASE}/essays/${essayId}`, { method: 'DELETE' })
+
+export const deleteResource = (resourceId: string) =>
+  fetch(`${BASE}/resources/${resourceId}`, { method: 'DELETE' })

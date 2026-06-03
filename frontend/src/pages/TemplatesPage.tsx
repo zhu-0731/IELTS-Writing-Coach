@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listResources, type ResourceItem, recordHintAction } from '../api/client'
+import { listResources, deleteResource, type ResourceItem } from '../api/client'
 import { copy } from '../i18n'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -56,12 +56,31 @@ function MasteryBar({ score }: { score: number }) {
   )
 }
 
-function ResourceCard({ item }: { item: ResourceItem }) {
+function ResourceCard({
+  item,
+  onDelete,
+}: {
+  item: ResourceItem
+  onDelete: (id: string) => void
+}) {
   const [expanded, setExpanded] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const errors = parseJson<string[]>(item.common_errors_json, [])
   const logicChain = parseJson<string[]>(item.zh_logic_chain_json, [])
   const masteryLabel = c.mastery[item.mastery as keyof typeof c.mastery] ?? item.mastery
   const typeLabel = c.filterType[item.type as keyof typeof c.filterType] ?? item.type
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await deleteResource(item.resource_id)
+      onDelete(item.resource_id)
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
 
   return (
     <Card padding="md" className="flex flex-col gap-2.5">
@@ -127,9 +146,34 @@ function ResourceCard({ item }: { item: ResourceItem }) {
         <span className="text-[10px] text-ghost">
           {item.source_essay_id ? c.card.fromDiag : c.card.seed}
         </span>
-        <span className="text-[10px] text-ghost ml-auto">
-          {item.difficulty}分难度
-        </span>
+        <span className="text-[10px] text-ghost">{item.difficulty}分难度</span>
+        <div className="ml-auto">
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-dim">确认删除？</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-[10px] text-danger hover:text-danger/80 font-medium disabled:opacity-50"
+              >
+                {deleting ? '删除中…' : '确认'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-[10px] text-ghost hover:text-dim"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-[10px] text-ghost hover:text-danger transition-colors"
+            >
+              删除
+            </button>
+          )}
+        </div>
       </div>
     </Card>
   )
@@ -217,7 +261,14 @@ export default function TemplatesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {items.map((item) => (
-            <ResourceCard key={item.resource_id} item={item} />
+            <ResourceCard
+              key={item.resource_id}
+              item={item}
+              onDelete={(id) => {
+                setItems((prev) => prev.filter((r) => r.resource_id !== id))
+                setTotal((n) => n - 1)
+              }}
+            />
           ))}
         </div>
       )}
