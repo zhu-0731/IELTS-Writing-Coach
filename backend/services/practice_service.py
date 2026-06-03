@@ -83,7 +83,7 @@ def generate_practice(
 
     essay_snippet = (essay['content'] or '')[:1500]
 
-    n_items = 8 if mode == 'cloze' else 5
+    n_items = 6 if mode == 'cloze' else 5
 
     system = (
         "You are an IELTS writing coach creating fill-in-the-blank exercises from a student's essay. "
@@ -155,19 +155,22 @@ Rules:
 - hint_zh ≤ 15 chars — Chinese meaning of the sentence
 - explanation_zh: key grammar points to remember"""
 
-    result = provider.chat_json(
-        messages=[
-            {'role': 'system', 'content': system},
-            {'role': 'user', 'content': user},
-        ],
-        schema={},
-        temperature=0.35,
-        max_tokens=2000,
-    )
+    try:
+        result = provider.chat_json(
+            messages=[
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': user},
+            ],
+            schema={},
+            temperature=0.35,
+            max_tokens=2600,
+        )
+    except Exception as e:
+        raise ValueError(f"练习题生成失败：{e}") from e
 
     items_data = result.get('items', [])
     if not items_data:
-        raise ValueError('LLM returned no practice items')
+        raise ValueError('模型未能生成练习题，请重试')
 
     # Validate: each item must have ___ in display (for cloze) or be "___" (dictation)
     valid = []
@@ -181,7 +184,7 @@ Rules:
         valid.append(item)
 
     if not valid:
-        raise ValueError('LLM items failed validation — no valid blanks found')
+        raise ValueError('模型生成的练习题格式不合格，请重试')
 
     # Persist
     session_id = str(uuid.uuid4())
