@@ -20,11 +20,11 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`
 }
 
-const MIN_LEFT = 200
-const MAX_LEFT = 480
-const MIN_RIGHT = 260
-const MAX_RIGHT = 600
-const SIDEBAR_COLLAPSED_W = 48
+const MIN_LEFT = 260
+const MAX_LEFT = 380
+const MIN_RIGHT = 300
+const MAX_RIGHT = 440
+const SIDEBAR_COLLAPSED_W = 56
 
 export default function WorkspacePage() {
   const [taskType, setTaskType] = useState<TaskType>('task2')
@@ -35,7 +35,7 @@ export default function WorkspacePage() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('hint')
   const [showDiagModal, setShowDiagModal] = useState(false)
 
-  const [leftWidth, setLeftWidth] = useState(300)
+  const [leftWidth, setLeftWidth] = useState(320)
   const [rightWidth, setRightWidth] = useState(340)
   const [isResizing, setIsResizing] = useState(false)
 
@@ -182,26 +182,24 @@ export default function WorkspacePage() {
   })()
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)] bg-canvas">
+    <div className="flex flex-col h-[calc(100vh-56px)] bg-canvas px-7 py-5 gap-4 overflow-hidden">
       {/* ── Status bar ───────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-5 py-2 bg-surface border-b border-line shrink-0">
-        {/* Save status */}
-        <span className={`text-xs ${saveStatus === 'error' ? 'text-danger' : 'text-ghost'}`}>
-          {saveLabel}
-        </span>
+      <div className="grid grid-cols-[minmax(180px,1fr)_auto_minmax(220px,1fr)] items-center gap-4 px-4 py-3 bg-surface border border-line rounded-card shadow-card shrink-0">
+        <div className="min-w-0">
+          <span className={`block truncate text-xs ${saveStatus === 'error' ? 'text-danger' : 'text-ghost'}`}>
+            {saveLabel}
+          </span>
+        </div>
 
-        {/* Controls */}
-        <div className="flex items-center gap-4">
-          {/* Word count */}
-          <span className="text-sm tabular-nums">
+        <div className="flex items-center justify-center gap-5">
+          <span className="text-sm tabular-nums whitespace-nowrap">
             <span className={wordCount >= targetWords ? 'text-ok font-semibold' : 'text-dim'}>
               {wordCount}
             </span>
             <span className="text-ghost text-xs ml-1">/ {targetWords}+ 词</span>
           </span>
 
-          {/* Timer */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
             <button
               onClick={() => setTimerRunning((r) => !r)}
               title={timerRunning ? c.timer.pause : c.timer.resume}
@@ -217,19 +215,29 @@ export default function WorkspacePage() {
               ↺
             </button>
           </div>
+        </div>
 
+        <div className="flex items-center justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={doSave} disabled={saveStatus === 'saving'}>
             {c.saveDraft}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowDiagModal(true)}
+            disabled={wordCount < 10}
+          >
+            {c.diagnose}
           </Button>
         </div>
       </div>
 
       {/* ── Three-column body ─────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden gap-3 min-h-0">
 
         {/* Left panel */}
         <div
-          className="shrink-0 bg-surface border-r border-line flex flex-col overflow-hidden"
+          className="shrink-0 bg-surface border border-line rounded-card shadow-card flex flex-col overflow-hidden"
           style={{ width: leftWidth }}
         >
           <PromptPanel
@@ -244,14 +252,14 @@ export default function WorkspacePage() {
 
         {/* Left drag handle */}
         <div
-          className="w-1 shrink-0 cursor-col-resize bg-line hover:bg-brand-muted transition-colors"
+          className="w-1.5 shrink-0 cursor-col-resize rounded-full bg-line/70 hover:bg-brand-muted transition-colors my-2"
           onMouseDown={startLeftDrag}
         />
 
         {/* Editor */}
-        <div className="flex-1 flex flex-col overflow-hidden px-6 py-5 gap-3">
+        <div className="flex-1 min-w-[420px] flex flex-col overflow-hidden gap-3">
           {/* Editor card */}
-          <div className="flex-1 bg-surface rounded-card border border-line shadow-editor overflow-hidden flex flex-col">
+          <div className="flex-1 bg-surface rounded-card border border-line shadow-editor overflow-hidden flex flex-col min-h-0">
             <textarea
               value={content}
               onChange={(e) => handleContentChange(e.target.value)}
@@ -274,7 +282,7 @@ export default function WorkspacePage() {
             </div>
 
             {/* Action row */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-1">
               <button
                 onClick={() => openTab('idea')}
                 className="px-3 py-1.5 text-xs font-medium text-dim hover:text-brand hover:bg-brand-light rounded-btn transition-colors"
@@ -288,14 +296,7 @@ export default function WorkspacePage() {
                 ✍️ {c.aiExpression}
               </button>
               <div className="flex-1" />
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setShowDiagModal(true)}
-                disabled={wordCount < 10}
-              >
-                {c.diagnose}
-              </Button>
+              <span className="text-xs text-ghost">{taskType === 'task1' ? c.task1 : c.task2}</span>
             </div>
           </div>
         </div>
@@ -303,7 +304,7 @@ export default function WorkspacePage() {
         {/* Right drag handle — only when sidebar expanded */}
         {!sidebarCollapsed && (
           <div
-            className="w-1 shrink-0 cursor-col-resize bg-line hover:bg-brand-muted transition-colors"
+            className="w-1.5 shrink-0 cursor-col-resize rounded-full bg-line/70 hover:bg-brand-muted transition-colors my-2"
             onMouseDown={startRightDrag}
           />
         )}
@@ -311,7 +312,7 @@ export default function WorkspacePage() {
         {/* AI Sidebar */}
         <div
           className={[
-            'shrink-0 border-l border-line bg-surface flex flex-col overflow-hidden',
+            'shrink-0 border border-line rounded-card shadow-card bg-surface flex flex-col overflow-hidden',
             !isResizing ? 'transition-[width] duration-200' : '',
           ].join(' ')}
           style={{ width: sidebarCollapsed ? SIDEBAR_COLLAPSED_W : rightWidth }}

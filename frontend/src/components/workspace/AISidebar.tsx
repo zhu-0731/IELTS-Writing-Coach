@@ -24,7 +24,7 @@ const SHORT: Record<Tab, string> = { hint: '提', idea: '思', expression: '表'
 export default function AISidebar({ collapsed, onToggle, activeTab, onTabChange }: Props) {
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center py-4 gap-3">
+      <div className="flex flex-col items-center py-4 gap-3 h-full">
         <button
           onClick={onToggle}
           title={c.expand}
@@ -73,13 +73,13 @@ export default function AISidebar({ collapsed, onToggle, activeTab, onTabChange 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'hint' && (
-          <EmptyState icon="💡" message={c.empty.hint} />
+          <EmptyState icon="💡" message={c.empty.hint} className="h-full min-h-[280px]" />
         )}
         {activeTab === 'idea' && (
-          <EmptyState icon="🗺️" message={c.empty.idea} />
+          <EmptyState icon="🗺️" message={c.empty.idea} className="h-full min-h-[280px]" />
         )}
         {activeTab === 'expression' && (
-          <EmptyState icon="✍️" message={c.empty.expression} />
+          <EmptyState icon="✍️" message={c.empty.expression} className="h-full min-h-[280px]" />
         )}
       </div>
     </div>

@@ -68,7 +68,7 @@ export default function PromptPanel({
         </div>
 
         {/* Essay prompt */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="shrink-0 flex flex-col">
           <label className="block text-[11px] font-semibold text-ghost uppercase tracking-widest mb-1.5">
             {c.prompt.section}
           </label>
@@ -76,7 +76,7 @@ export default function PromptPanel({
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
             placeholder={taskType === 'task1' ? c.prompt.placeholder1 : c.prompt.placeholder2}
-            className="flex-1 w-full px-3 py-2.5 text-sm border border-line rounded-input resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand leading-relaxed text-ink placeholder:text-ghost transition-colors min-h-[120px]"
+            className="h-52 w-full px-3 py-2.5 text-sm border border-line rounded-input resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand leading-relaxed text-ink placeholder:text-ghost transition-colors"
           />
         </div>
 

@@ -16,17 +16,17 @@ export default function TopNav() {
 
   return (
     <header className="bg-surface border-b border-line sticky top-0 z-40 h-14">
-      <div className="max-w-6xl mx-auto px-5 h-full flex items-center justify-between">
+      <div className="w-full max-w-[1180px] mx-auto px-6 md:px-8 h-full grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(190px,1fr)_auto_minmax(190px,1fr)] items-center gap-4">
         {/* Brand */}
         <button
           onClick={() => navigate('/')}
-          className="text-sm font-semibold text-ink hover:text-brand transition-colors tracking-tight"
+          className="justify-self-start text-sm font-semibold text-ink hover:text-brand transition-colors tracking-tight"
         >
           {copy.app.brand}
         </button>
 
         {/* Main nav */}
-        <nav className="hidden sm:flex items-center gap-0.5">
+        <nav className="hidden sm:flex items-center justify-center gap-0.5 bg-muted/70 rounded-card p-1">
           {NAV_ITEMS.map(({ to, label, end }) => (
             <NavLink
               key={to}
@@ -47,7 +47,7 @@ export default function TopNav() {
         </nav>
 
         {/* Right */}
-        <div className="flex items-center gap-2">
+        <div className="justify-self-end flex items-center gap-2">
           <Button
             variant="primary"
             size="sm"
