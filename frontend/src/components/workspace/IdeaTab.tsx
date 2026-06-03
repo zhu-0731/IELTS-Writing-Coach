@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { generateIdea, type IdeaResult, type IdeaStance } from '../../api/client'
 import { copy } from '../../i18n'
 import Button from '../ui/Button'
@@ -15,10 +15,20 @@ interface Props {
 type Phase = 'idle' | 'loading' | 'result' | 'error'
 
 export default function IdeaTab({ taskType, questionType, prompt, essayId }: Props) {
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [result, setResult] = useState<IdeaResult | null>(null)
+  const [phase, setPhase] = useState<Phase>(() => {
+    try { const d = JSON.parse(sessionStorage.getItem('workspace_idea') || '{}'); const p = d.phase as Phase; return (p && p !== 'loading') ? p : 'idle' } catch { return 'idle' }
+  })
+  const [result, setResult] = useState<IdeaResult | null>(() => {
+    try { const d = JSON.parse(sessionStorage.getItem('workspace_idea') || '{}'); return (d.result as IdeaResult) ?? null } catch { return null }
+  })
   const [error, setError] = useState('')
-  const [selectedStance, setSelectedStance] = useState<IdeaStance | null>(null)
+  const [selectedStance, setSelectedStance] = useState<IdeaStance | null>(() => {
+    try { const d = JSON.parse(sessionStorage.getItem('workspace_idea') || '{}'); return (d.selectedStance as IdeaStance) ?? null } catch { return null }
+  })
+
+  useEffect(() => {
+    try { sessionStorage.setItem('workspace_idea', JSON.stringify({ phase, result, selectedStance })) } catch { /* ignore */ }
+  }, [phase, result, selectedStance])
 
   const hasPrompt = prompt.trim().length > 0
 

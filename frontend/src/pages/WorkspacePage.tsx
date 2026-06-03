@@ -27,30 +27,57 @@ const MIN_RIGHT = 300
 const MAX_RIGHT = 440
 const SIDEBAR_COLLAPSED_W = 56
 
+// Each task type gets its own draft slot; workspace_active_task tracks which is open.
+function getDraft(t?: TaskType): Record<string, unknown> {
+  try {
+    const key = t ?? (sessionStorage.getItem('workspace_active_task') as TaskType | null) ?? 'task2'
+    const raw = sessionStorage.getItem(`workspace_draft_${key}`)
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+  } catch { return {} }
+}
+function draft<T>(key: string, t?: TaskType): T | undefined {
+  return getDraft(t)[key] as T | undefined
+}
+
 export default function WorkspacePage() {
-  const [taskType, setTaskType] = useState<TaskType>('task2')
-  const [questionType, setQuestionType] = useState('')
-  const [prompt, setPrompt] = useState('')
-  const [content, setContent] = useState('')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [activeTab, setActiveTab] = useState<SidebarTab>('hint')
+  // Lazy initialisers read from sessionStorage — correct on the very first render.
+  const [taskType, setTaskType] = useState<TaskType>(
+    () => (sessionStorage.getItem('workspace_active_task') as TaskType | null) ?? 'task2'
+  )
+  const [questionType, setQuestionType] = useState<string>(() => draft('questionType') ?? '')
+  const [prompt, setPrompt] = useState<string>(() => draft('prompt') ?? '')
+  const [content, setContent] = useState<string>(() => draft('content') ?? '')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => draft('sidebarCollapsed') ?? false)
+  const [activeTab, setActiveTab] = useState<SidebarTab>(() => draft('activeTab') ?? 'hint')
   const [showDiagModal, setShowDiagModal] = useState(false)
 
-  const [leftWidth, setLeftWidth] = useState(320)
-  const [rightWidth, setRightWidth] = useState(340)
+  const [leftWidth, setLeftWidth] = useState<number>(() => draft('leftWidth') ?? 320)
+  const [rightWidth, setRightWidth] = useState<number>(() => draft('rightWidth') ?? 340)
   const [isResizing, setIsResizing] = useState(false)
 
-  const [essayId, setEssayId] = useState<string | null>(null)
+  const [promptImage, setPromptImage] = useState<string | null>(null)
+  const [essayId, setEssayId] = useState<string | null>(() => draft('essayId') ?? null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [elapsed, setElapsed] = useState(0)
+  const [elapsed, setElapsed] = useState<number>(() => draft('elapsed') ?? 0)
   const [timerRunning, setTimerRunning] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const leftDrag = useRef({ active: false, startX: 0, startW: 0 })
   const rightDrag = useRef({ active: false, startX: 0, startW: 0 })
+
+  // Persist to a per-task-type slot so each task's draft is independent.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('workspace_active_task', taskType)
+      sessionStorage.setItem(`workspace_draft_${taskType}`, JSON.stringify({
+        questionType, prompt, content, essayId,
+        elapsed, sidebarCollapsed, activeTab, leftWidth, rightWidth,
+      }))
+    } catch { /* quota exceeded — silently skip */ }
+  }, [taskType, questionType, prompt, content, essayId, elapsed, sidebarCollapsed, activeTab, leftWidth, rightWidth])
 
   const wordCount = countWords(content)
   const targetWords = taskType === 'task1' ? 150 : 250
@@ -161,12 +188,15 @@ export default function WorkspacePage() {
   }, [content, prompt, doSave])
 
   const switchTask = (t: TaskType) => {
+    // Restore this task type's saved draft (empty defaults if none saved yet)
+    const saved = getDraft(t)
     setTaskType(t)
-    setQuestionType('')
-    setPrompt('')
-    setContent('')
-    setEssayId(null)
-    setElapsed(0)
+    setQuestionType((saved.questionType as string) ?? '')
+    setPrompt((saved.prompt as string) ?? '')
+    setContent((saved.content as string) ?? '')
+    setEssayId((saved.essayId as string | null) ?? null)
+    setElapsed((saved.elapsed as number) ?? 0)
+    setPromptImage(null)
     setTimerRunning(false)
     setSaveStatus('idle')
   }
@@ -263,9 +293,11 @@ export default function WorkspacePage() {
             taskType={taskType}
             questionType={questionType}
             prompt={prompt}
+            promptImage={promptImage}
             onTaskChange={switchTask}
             onQuestionTypeChange={setQuestionType}
             onPromptChange={setPrompt}
+            onImageChange={setPromptImage}
           />
         </div>
 
@@ -358,6 +390,7 @@ export default function WorkspacePage() {
           taskType={taskType}
           questionType={questionType}
           prompt={prompt}
+          promptImage={promptImage}
           content={content}
           wordCount={wordCount}
           onClose={() => setShowDiagModal(false)}

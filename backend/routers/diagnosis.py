@@ -18,6 +18,7 @@ class DiagnosisRequest(BaseModel):
     question_type: str = ""
     prompt: str = ""
     content: str
+    image_base64: str | None = None
 
 
 def _get_provider():
@@ -47,6 +48,7 @@ def full_diagnosis(body: DiagnosisRequest):
             body.prompt,
             body.task_type,
             body.question_type,
+            image_base64=body.image_base64,
         )
     except HTTPException:
         raise

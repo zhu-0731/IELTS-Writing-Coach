@@ -10,6 +10,7 @@ interface Props {
   taskType: string
   questionType: string
   prompt: string
+  promptImage?: string | null
   content: string
   wordCount: number
   onClose: () => void
@@ -27,6 +28,7 @@ export default function DiagnosisModal({
   taskType,
   questionType,
   prompt,
+  promptImage,
   content,
   wordCount,
   onClose,
@@ -45,6 +47,7 @@ export default function DiagnosisModal({
         question_type: questionType,
         prompt,
         content,
+        image_base64: promptImage ?? undefined,
       })
       setResult(data)
       setPhase('result')
