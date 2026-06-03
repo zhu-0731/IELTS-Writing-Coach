@@ -1,5 +1,45 @@
 @import "tailwindcss";
 
+@theme {
+  /* ── Surface colors ─────────────────────────── */
+  --color-canvas: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-muted: #F1F5F9;
+
+  /* ── Borders ──────────────────────────────────── */
+  --color-line: #E2E8F0;
+
+  /* ── Text ─────────────────────────────────────── */
+  --color-ink: #0F172A;
+  --color-dim: #475569;
+  --color-ghost: #94A3B8;
+
+  /* ── Brand ────────────────────────────────────── */
+  --color-brand: #2563EB;
+  --color-brand-hover: #1D4ED8;
+  --color-brand-light: #EFF6FF;
+  --color-brand-muted: #DBEAFE;
+
+  /* ── State ────────────────────────────────────── */
+  --color-warn: #F59E0B;
+  --color-warn-light: #FFFBEB;
+  --color-danger: #EF4444;
+  --color-danger-light: #FEF2F2;
+  --color-ok: #10B981;
+  --color-ok-light: #ECFDF5;
+
+  /* ── Semantic border-radius ───────────────────── */
+  --radius-btn: 6px;
+  --radius-card: 10px;
+  --radius-input: 8px;
+  --radius-panel: 14px;
+
+  /* ── Shadows ──────────────────────────────────── */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-panel: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+  --shadow-editor: 0 1px 4px 0 rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -8,9 +48,10 @@
 
 body {
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background-color: #f8fafc;
-  color: #1e293b;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  font-size: 14px;
 }
 
 #root {

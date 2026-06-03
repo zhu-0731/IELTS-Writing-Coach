@@ -49,3 +49,11 @@ Thumbs.db
 # 日志
 *.log
 npm-debug.log*
+
+# 云同步工具残留
+*.baiduyun.uploading.cfg
+*.baiduyun.*
+
+# SQLite WAL 文件
+*.db-shm
+*.db-wal
