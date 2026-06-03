@@ -190,6 +190,12 @@ export const copy = {
         irrelevant: '不适合这题',
         commonErrors: '⚠️ 避错提醒',
         refLabel: '参考英文',
+        matchBtn: '根据题目推荐',
+        matching: '正在分析题目…',
+        matchError: '匹配失败，请检查 API 配置',
+        matchNoResult: '未找到相关资源，显示常规提示',
+        rematch: '重新匹配',
+        showAll: '查看全部提示',
         masteryLabel: {
           unstable: '待巩固',
           learning: '学习中',
