@@ -1,0 +1,21 @@
+from fastapi import APIRouter
+from database import get_db
+
+router = APIRouter()
+
+CLEARABLE_TABLES = [
+    "user_profile",
+    "essays",
+    "language_resources",
+    "hint_usage",
+    "diagnoses",
+]
+
+@router.post("/api/data/reset")
+def reset_data():
+    db = get_db()
+    for table in CLEARABLE_TABLES:
+        db.execute(f"DELETE FROM {table}")
+    db.commit()
+    db.close()
+    return {"ok": True}

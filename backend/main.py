@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import init_db
 from routers import settings as settings_router
 from routers import profile as profile_router
+from routers import reset as reset_router
 
 app = FastAPI(title="IELTS Writing Coach API", version="0.1.0")
 
@@ -17,6 +18,7 @@ app.add_middleware(
 
 app.include_router(settings_router.router)
 app.include_router(profile_router.router)
+app.include_router(reset_router.router)
 
 
 @app.on_event("startup")

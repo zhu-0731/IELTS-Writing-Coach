@@ -61,3 +61,7 @@ export const getSettings = () =>
 
 export const saveSettings = (data: SettingsWrite) =>
   request<SettingsData>('/settings', { method: 'PUT', body: JSON.stringify(data) })
+
+// Data reset
+export const resetAllData = () =>
+  request<{ ok: boolean }>('/data/reset', { method: 'POST' })

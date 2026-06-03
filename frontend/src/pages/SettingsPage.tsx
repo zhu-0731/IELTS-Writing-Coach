@@ -1,10 +1,82 @@
 import { useEffect, useState } from 'react'
-import { getSettings, saveSettings, type SettingsData, type SettingsWrite } from '../api/client'
+import { getSettings, saveSettings, resetAllData, type SettingsData, type SettingsWrite } from '../api/client'
 
 type Status = 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 
+const RESET_CONFIRM_PHRASE = 'reset my data'
+
+function ResetModal({ onClose }: { onClose: () => void }) {
+  const [input, setInput] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const [err, setErr] = useState('')
+  const confirmed = input === RESET_CONFIRM_PHRASE
+
+  async function handleReset() {
+    if (!confirmed) return
+    setResetting(true)
+    setErr('')
+    try {
+      await resetAllData()
+      window.location.replace('/')
+    } catch {
+      setErr('清空失败，请确认后端正在运行')
+      setResetting(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+        <h3 className="text-lg font-bold text-slate-800 mb-2">清空所有数据</h3>
+        <p className="text-sm text-slate-500 mb-1">
+          此操作将删除：问卷设置、所有作文、语言资源、诊断记录。
+        </p>
+        <p className="text-sm text-slate-500 mb-6">
+          <strong>API 配置（Key、模型）不会删除。</strong>删除后将跳回初始设置。
+        </p>
+
+        <p className="text-sm font-medium text-slate-700 mb-2">
+          请输入以下内容确认：
+          <code className="ml-1 px-2 py-0.5 bg-slate-100 rounded text-red-600 font-mono">
+            {RESET_CONFIRM_PHRASE}
+          </code>
+        </p>
+        <input
+          className="w-full px-3 py-2 border-2 border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-red-400 mb-4"
+          placeholder={RESET_CONFIRM_PHRASE}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          autoFocus
+        />
+
+        {err && <p className="text-sm text-red-500 mb-3">{err}</p>}
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleReset}
+            disabled={!confirmed || resetting}
+            className="px-5 py-2 bg-red-500 text-white text-sm font-semibold rounded-xl hover:bg-red-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            {resetting ? '清空中…' : '确认清空'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const [status, setStatus] = useState<Status>('loading')
+  const [showReset, setShowReset] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState<SettingsData | null>(null)
 
@@ -83,6 +155,7 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto py-10 px-4">
+      {showReset && <ResetModal onClose={() => setShowReset(false)} />}
       <h1 className="text-2xl font-semibold text-slate-800 mb-1">设置</h1>
       <p className="text-sm text-slate-500 mb-8">
         配置 AI 模型。API Key 仅存储在本地数据库，不会上传或提交到代码仓库。
@@ -200,6 +273,20 @@ export default function SettingsPage() {
           </div>
         </form>
       )}
+
+      {/* 危险区 */}
+      <div className="mt-12 border-t border-red-100 pt-8">
+        <h2 className="text-base font-semibold text-red-600 mb-1">危险操作</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          清空所有学习数据（问卷、作文、诊断记录）。API 配置保留。
+        </p>
+        <button
+          onClick={() => setShowReset(true)}
+          className="px-5 py-2.5 border-2 border-red-300 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-50 transition-colors"
+        >
+          清空数据…
+        </button>
+      </div>
     </div>
   )
 }
