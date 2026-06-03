@@ -27,31 +27,52 @@ const MIN_RIGHT = 300
 const MAX_RIGHT = 440
 const SIDEBAR_COLLAPSED_W = 56
 
+// Read a key from the persisted workspace draft in sessionStorage.
+function draft<T>(key: string): T | undefined {
+  try {
+    const raw = sessionStorage.getItem('workspace_draft')
+    if (!raw) return undefined
+    return (JSON.parse(raw) as Record<string, unknown>)[key] as T | undefined
+  } catch { return undefined }
+}
+
 export default function WorkspacePage() {
-  const [taskType, setTaskType] = useState<TaskType>('task2')
-  const [questionType, setQuestionType] = useState('')
-  const [prompt, setPrompt] = useState('')
-  const [content, setContent] = useState('')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [activeTab, setActiveTab] = useState<SidebarTab>('hint')
+  // Lazy initialisers read from sessionStorage so state is correct on the
+  // very first render — no double-render / race condition from a restoration effect.
+  const [taskType, setTaskType] = useState<TaskType>(() => draft('taskType') ?? 'task2')
+  const [questionType, setQuestionType] = useState<string>(() => draft('questionType') ?? '')
+  const [prompt, setPrompt] = useState<string>(() => draft('prompt') ?? '')
+  const [content, setContent] = useState<string>(() => draft('content') ?? '')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => draft('sidebarCollapsed') ?? false)
+  const [activeTab, setActiveTab] = useState<SidebarTab>(() => draft('activeTab') ?? 'hint')
   const [showDiagModal, setShowDiagModal] = useState(false)
 
-  const [leftWidth, setLeftWidth] = useState(320)
-  const [rightWidth, setRightWidth] = useState(340)
+  const [leftWidth, setLeftWidth] = useState<number>(() => draft('leftWidth') ?? 320)
+  const [rightWidth, setRightWidth] = useState<number>(() => draft('rightWidth') ?? 340)
   const [isResizing, setIsResizing] = useState(false)
 
   const [promptImage, setPromptImage] = useState<string | null>(null)
-  const [essayId, setEssayId] = useState<string | null>(null)
+  const [essayId, setEssayId] = useState<string | null>(() => draft('essayId') ?? null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [elapsed, setElapsed] = useState(0)
+  const [elapsed, setElapsed] = useState<number>(() => draft('elapsed') ?? 0)
   const [timerRunning, setTimerRunning] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const leftDrag = useRef({ active: false, startX: 0, startW: 0 })
   const rightDrag = useRef({ active: false, startX: 0, startW: 0 })
+
+  // Persist workspace state to sessionStorage on every relevant change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('workspace_draft', JSON.stringify({
+        taskType, questionType, prompt, content, essayId,
+        elapsed, sidebarCollapsed, activeTab, leftWidth, rightWidth,
+      }))
+    } catch { /* quota exceeded — silently skip */ }
+  }, [taskType, questionType, prompt, content, essayId, elapsed, sidebarCollapsed, activeTab, leftWidth, rightWidth])
 
   const wordCount = countWords(content)
   const targetWords = taskType === 'task1' ? 150 : 250
@@ -162,6 +183,11 @@ export default function WorkspacePage() {
   }, [content, prompt, doSave])
 
   const switchTask = (t: TaskType) => {
+    try {
+      sessionStorage.removeItem('workspace_draft')
+      sessionStorage.removeItem('workspace_idea')
+      sessionStorage.removeItem('workspace_expression')
+    } catch { /* ignore */ }
     setTaskType(t)
     setQuestionType('')
     setPrompt('')

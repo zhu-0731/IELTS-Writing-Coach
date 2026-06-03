@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { generateExpression, type ExpressionResult, type ExpressionLevel } from '../../api/client'
 import { copy } from '../../i18n'
 import Button from '../ui/Button'
@@ -52,10 +52,20 @@ function LevelCard({
 }
 
 export default function ExpressionTab({ taskType, onInsertText }: Props) {
-  const [input, setInput] = useState('')
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [result, setResult] = useState<ExpressionResult | null>(null)
+  const [input, setInput] = useState<string>(() => {
+    try { const d = JSON.parse(sessionStorage.getItem('workspace_expression') || '{}'); return (d.input as string) ?? '' } catch { return '' }
+  })
+  const [phase, setPhase] = useState<Phase>(() => {
+    try { const d = JSON.parse(sessionStorage.getItem('workspace_expression') || '{}'); const p = d.phase as Phase; return (p && p !== 'loading') ? p : 'idle' } catch { return 'idle' }
+  })
+  const [result, setResult] = useState<ExpressionResult | null>(() => {
+    try { const d = JSON.parse(sessionStorage.getItem('workspace_expression') || '{}'); return (d.result as ExpressionResult) ?? null } catch { return null }
+  })
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    try { sessionStorage.setItem('workspace_expression', JSON.stringify({ input, phase, result })) } catch { /* ignore */ }
+  }, [input, phase, result])
 
   const submit = async () => {
     if (!input.trim()) return
