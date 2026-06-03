@@ -27,19 +27,23 @@ const MIN_RIGHT = 300
 const MAX_RIGHT = 440
 const SIDEBAR_COLLAPSED_W = 56
 
-// Read a key from the persisted workspace draft in sessionStorage.
-function draft<T>(key: string): T | undefined {
+// Each task type gets its own draft slot; workspace_active_task tracks which is open.
+function getDraft(t?: TaskType): Record<string, unknown> {
   try {
-    const raw = sessionStorage.getItem('workspace_draft')
-    if (!raw) return undefined
-    return (JSON.parse(raw) as Record<string, unknown>)[key] as T | undefined
-  } catch { return undefined }
+    const key = t ?? (sessionStorage.getItem('workspace_active_task') as TaskType | null) ?? 'task2'
+    const raw = sessionStorage.getItem(`workspace_draft_${key}`)
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+  } catch { return {} }
+}
+function draft<T>(key: string, t?: TaskType): T | undefined {
+  return getDraft(t)[key] as T | undefined
 }
 
 export default function WorkspacePage() {
-  // Lazy initialisers read from sessionStorage so state is correct on the
-  // very first render — no double-render / race condition from a restoration effect.
-  const [taskType, setTaskType] = useState<TaskType>(() => draft('taskType') ?? 'task2')
+  // Lazy initialisers read from sessionStorage — correct on the very first render.
+  const [taskType, setTaskType] = useState<TaskType>(
+    () => (sessionStorage.getItem('workspace_active_task') as TaskType | null) ?? 'task2'
+  )
   const [questionType, setQuestionType] = useState<string>(() => draft('questionType') ?? '')
   const [prompt, setPrompt] = useState<string>(() => draft('prompt') ?? '')
   const [content, setContent] = useState<string>(() => draft('content') ?? '')
@@ -64,11 +68,12 @@ export default function WorkspacePage() {
   const leftDrag = useRef({ active: false, startX: 0, startW: 0 })
   const rightDrag = useRef({ active: false, startX: 0, startW: 0 })
 
-  // Persist workspace state to sessionStorage on every relevant change
+  // Persist to a per-task-type slot so each task's draft is independent.
   useEffect(() => {
     try {
-      sessionStorage.setItem('workspace_draft', JSON.stringify({
-        taskType, questionType, prompt, content, essayId,
+      sessionStorage.setItem('workspace_active_task', taskType)
+      sessionStorage.setItem(`workspace_draft_${taskType}`, JSON.stringify({
+        questionType, prompt, content, essayId,
         elapsed, sidebarCollapsed, activeTab, leftWidth, rightWidth,
       }))
     } catch { /* quota exceeded — silently skip */ }
@@ -183,18 +188,15 @@ export default function WorkspacePage() {
   }, [content, prompt, doSave])
 
   const switchTask = (t: TaskType) => {
-    try {
-      sessionStorage.removeItem('workspace_draft')
-      sessionStorage.removeItem('workspace_idea')
-      sessionStorage.removeItem('workspace_expression')
-    } catch { /* ignore */ }
+    // Restore this task type's saved draft (empty defaults if none saved yet)
+    const saved = getDraft(t)
     setTaskType(t)
-    setQuestionType('')
-    setPrompt('')
-    setContent('')
+    setQuestionType((saved.questionType as string) ?? '')
+    setPrompt((saved.prompt as string) ?? '')
+    setContent((saved.content as string) ?? '')
+    setEssayId((saved.essayId as string | null) ?? null)
+    setElapsed((saved.elapsed as number) ?? 0)
     setPromptImage(null)
-    setEssayId(null)
-    setElapsed(0)
     setTimerRunning(false)
     setSaveStatus('idle')
   }
