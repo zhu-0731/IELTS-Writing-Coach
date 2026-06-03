@@ -1,6 +1,8 @@
 import { copy } from '../../i18n'
-import EmptyState from '../ui/EmptyState'
 import Tabs from '../ui/Tabs'
+import HintTab from './HintTab'
+import IdeaTab from './IdeaTab'
+import ExpressionTab from './ExpressionTab'
 
 type Tab = 'hint' | 'idea' | 'expression'
 
@@ -9,19 +11,35 @@ interface Props {
   onToggle: () => void
   activeTab: Tab
   onTabChange: (tab: Tab) => void
+  // essay context
+  taskType: string
+  essayId: string | null
+  prompt: string
+  questionType: string
+  onInsertText: (text: string) => void
 }
 
 const c = copy.workspace.sidebar
 
 const TAB_LIST = [
-  { key: 'hint' as Tab,       label: c.tabs.hint },
-  { key: 'idea' as Tab,       label: c.tabs.idea },
-  { key: 'expression' as Tab, label: c.tabs.expression },
+  { key: 'hint' as Tab,        label: c.tabs.hint },
+  { key: 'idea' as Tab,        label: c.tabs.idea },
+  { key: 'expression' as Tab,  label: c.tabs.expression },
 ]
 
 const SHORT: Record<Tab, string> = { hint: '提', idea: '思', expression: '表' }
 
-export default function AISidebar({ collapsed, onToggle, activeTab, onTabChange }: Props) {
+export default function AISidebar({
+  collapsed,
+  onToggle,
+  activeTab,
+  onTabChange,
+  taskType,
+  essayId,
+  prompt,
+  questionType,
+  onInsertText,
+}: Props) {
   if (collapsed) {
     return (
       <div className="flex flex-col items-center py-4 gap-3 h-full">
@@ -71,15 +89,20 @@ export default function AISidebar({ collapsed, onToggle, activeTab, onTabChange 
       />
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {activeTab === 'hint' && (
-          <EmptyState icon="💡" message={c.empty.hint} className="h-full min-h-[280px]" />
+          <HintTab taskType={taskType} essayId={essayId} />
         )}
         {activeTab === 'idea' && (
-          <EmptyState icon="🗺️" message={c.empty.idea} className="h-full min-h-[280px]" />
+          <IdeaTab
+            taskType={taskType}
+            questionType={questionType}
+            prompt={prompt}
+            essayId={essayId}
+          />
         )}
         {activeTab === 'expression' && (
-          <EmptyState icon="✍️" message={c.empty.expression} className="h-full min-h-[280px]" />
+          <ExpressionTab taskType={taskType} onInsertText={onInsertText} />
         )}
       </div>
     </div>

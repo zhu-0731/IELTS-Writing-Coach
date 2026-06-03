@@ -47,6 +47,7 @@ export default function WorkspacePage() {
   const [timerRunning, setTimerRunning] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const editorRef = useRef<HTMLTextAreaElement>(null)
   const leftDrag = useRef({ active: false, startX: 0, startW: 0 })
   const rightDrag = useRef({ active: false, startX: 0, startW: 0 })
 
@@ -174,6 +175,23 @@ export default function WorkspacePage() {
     setSidebarCollapsed(false)
   }
 
+  const handleInsertText = useCallback((text: string) => {
+    const ta = editorRef.current
+    if (!ta) {
+      const updated = content + (content ? '\n' : '') + text
+      handleContentChange(updated)
+      return
+    }
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const updated = content.slice(0, start) + text + content.slice(end)
+    handleContentChange(updated)
+    requestAnimationFrame(() => {
+      ta.selectionStart = ta.selectionEnd = start + text.length
+      ta.focus()
+    })
+  }, [content])
+
   const saveLabel = (() => {
     if (saveStatus === 'saving') return c.saveStatus.saving
     if (saveStatus === 'saved')  return c.saveStatus.saved
@@ -261,6 +279,7 @@ export default function WorkspacePage() {
           {/* Editor card */}
           <div className="flex-1 bg-surface rounded-card border border-line shadow-editor overflow-hidden flex flex-col min-h-0">
             <textarea
+              ref={editorRef}
               value={content}
               onChange={(e) => handleContentChange(e.target.value)}
               placeholder={taskType === 'task1' ? c.editor.placeholder1 : c.editor.placeholder2}
@@ -322,6 +341,11 @@ export default function WorkspacePage() {
             onToggle={() => setSidebarCollapsed((c) => !c)}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            taskType={taskType}
+            essayId={essayId}
+            prompt={prompt}
+            questionType={questionType}
+            onInsertText={handleInsertText}
           />
         </div>
       </div>

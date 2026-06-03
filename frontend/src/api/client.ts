@@ -99,3 +99,64 @@ export const createEssay = (data: EssayCreate) =>
 
 export const updateEssay = (id: string, data: EssayUpdate) =>
   request<EssayData>(`/essays/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+
+// Hints (language resources)
+export interface HintCard {
+  resource_id: string
+  type: string
+  name: string
+  zh_goal: string
+  pattern: string
+  items_json: string
+  zh_logic_chain_json: string
+  common_errors_json: string
+  difficulty: string
+  mastery: string
+  mastery_score: number
+}
+
+export const getHints = (taskType: string, limit = 6) =>
+  request<HintCard[]>(`/hints?task_type=${taskType}&limit=${limit}`)
+
+export const recordHintAction = (
+  resourceId: string,
+  data: { essay_id?: string | null; action: string },
+) => request<{ ok: boolean; new_mastery_score: number }>(`/hints/${resourceId}/action`, {
+  method: 'POST',
+  body: JSON.stringify(data),
+})
+
+// Idea Coach
+export interface IdeaStance {
+  label: string
+  logic_chain: string[]
+}
+
+export interface IdeaResult {
+  task_breakdown: string
+  stances: IdeaStance[]
+  usage_note: string
+}
+
+export const generateIdea = (data: {
+  task_type: string
+  question_type: string
+  prompt: string
+  essay_id?: string | null
+}) => request<IdeaResult>('/coach/idea', { method: 'POST', body: JSON.stringify(data) })
+
+// Expression Coach
+export interface ExpressionLevel {
+  en: string
+  tip: string
+}
+
+export interface ExpressionResult {
+  low_risk: ExpressionLevel
+  recommended: ExpressionLevel
+  advanced: ExpressionLevel
+  usage_guide: string
+}
+
+export const generateExpression = (data: { chinese_text: string; task_type: string }) =>
+  request<ExpressionResult>('/coach/expression', { method: 'POST', body: JSON.stringify(data) })

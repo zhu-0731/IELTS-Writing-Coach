@@ -6,6 +6,8 @@ from routers import settings as settings_router
 from routers import profile as profile_router
 from routers import reset as reset_router
 from routers import essays as essays_router
+from routers import hints as hints_router
+from routers import coach as coach_router
 
 app = FastAPI(title="IELTS Writing Coach API", version="0.1.0")
 
@@ -21,6 +23,8 @@ app.include_router(settings_router.router)
 app.include_router(profile_router.router)
 app.include_router(reset_router.router)
 app.include_router(essays_router.router)
+app.include_router(hints_router.router)
+app.include_router(coach_router.router)
 
 
 @app.on_event("startup")
