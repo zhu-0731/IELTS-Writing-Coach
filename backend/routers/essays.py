@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from database import get_conn
@@ -74,6 +74,32 @@ def update_essay(essay_id: str, body: EssayUpdate):
     row = db.execute("SELECT * FROM essays WHERE essay_id = ?", (essay_id,)).fetchone()
     db.close()
     return dict(row)
+
+
+@router.get("/api/essays")
+def list_essays(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    db = get_conn()
+    total = db.execute("SELECT COUNT(*) FROM essays").fetchone()[0]
+    rows = db.execute(
+        """SELECT e.essay_id, e.task_type, e.question_type, e.prompt,
+                  e.word_count, e.created_at, e.updated_at,
+                  d.diagnosis_id, d.estimated_band,
+                  d.main_problems_json, d.next_training_task
+           FROM essays e
+           LEFT JOIN diagnoses d ON d.essay_id = e.essay_id
+               AND d.created_at = (
+                   SELECT MAX(d2.created_at) FROM diagnoses d2
+                   WHERE d2.essay_id = e.essay_id
+               )
+           ORDER BY e.updated_at DESC
+           LIMIT ? OFFSET ?""",
+        [limit, offset],
+    ).fetchall()
+    db.close()
+    return {"total": total, "items": [dict(r) for r in rows]}
 
 
 @router.get("/api/essays/{essay_id}", response_model=EssayRead)
