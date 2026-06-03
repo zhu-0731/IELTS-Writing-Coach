@@ -34,9 +34,9 @@ export default function TopNav() {
               end={end}
               className={({ isActive }) =>
                 [
-                  'px-3 py-1.5 rounded-btn text-sm transition-colors',
+                  'px-3 py-1.5 rounded-btn text-sm font-medium transition-colors',
                   isActive
-                    ? 'bg-brand-light text-brand font-medium'
+                    ? 'bg-brand-light text-brand'
                     : 'text-dim hover:text-ink hover:bg-muted',
                 ].join(' ')
               }

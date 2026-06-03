@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { copy } from '../../i18n'
 
 type TaskType = 'task1' | 'task2'
@@ -6,9 +7,11 @@ interface Props {
   taskType: TaskType
   questionType: string
   prompt: string
+  promptImage: string | null
   onTaskChange: (t: TaskType) => void
   onQuestionTypeChange: (v: string) => void
   onPromptChange: (v: string) => void
+  onImageChange: (dataUrl: string | null) => void
 }
 
 const c = copy.workspace
@@ -21,11 +24,29 @@ const REQUIREMENTS: Record<TaskType, string[]> = {
   task2: [...c.requirements.task2],
 }
 
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024 // 4 MB
+
 export default function PromptPanel({
-  taskType, questionType, prompt, onTaskChange, onQuestionTypeChange, onPromptChange,
+  taskType, questionType, prompt, promptImage,
+  onTaskChange, onQuestionTypeChange, onPromptChange, onImageChange,
 }: Props) {
   const types = taskType === 'task1' ? TASK1_TYPES : TASK2_TYPES
   const reqs = REQUIREMENTS[taskType]
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > MAX_IMAGE_BYTES) {
+      alert('图片不超过 4 MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => onImageChange(reader.result as string)
+    reader.readAsDataURL(file)
+    // reset input so same file can be re-selected
+    e.target.value = ''
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -95,11 +116,43 @@ export default function PromptPanel({
           </ul>
         </div>
 
-        {/* Image upload placeholder (Task 1 only) */}
+        {/* Image upload (Task 1 only) */}
         {taskType === 'task1' && (
-          <div className="shrink-0 border border-dashed border-line rounded-input p-3 text-center">
-            <p className="text-xs text-ghost">{c.prompt.imageUpload}</p>
-            <p className="text-[11px] text-ghost/60 mt-0.5">{c.prompt.imageUploadHint}</p>
+          <div className="shrink-0">
+            <label className="block text-[11px] font-semibold text-ghost uppercase tracking-widest mb-1.5">
+              {c.prompt.imageUpload}
+            </label>
+            {promptImage ? (
+              <div className="relative rounded-input overflow-hidden border border-line">
+                <img
+                  src={promptImage}
+                  alt="题目图片"
+                  className="w-full max-h-40 object-contain bg-muted"
+                />
+                <button
+                  onClick={() => onImageChange(null)}
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-ink/60 text-white text-xs flex items-center justify-center hover:bg-ink transition-colors"
+                  title="移除图片"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border border-dashed border-line rounded-input py-3 px-3 text-center hover:border-brand/50 hover:bg-brand-light/30 transition-colors"
+              >
+                <p className="text-xs text-ghost">点击上传图表图片</p>
+                <p className="text-[11px] text-ghost/60 mt-0.5">{c.prompt.imageUploadHint}</p>
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
         )}
       </div>
