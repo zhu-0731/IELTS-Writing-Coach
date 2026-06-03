@@ -40,6 +40,10 @@
   --shadow-editor: 0 1px 4px 0 rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   background-color: var(--color-canvas);
