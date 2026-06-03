@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from database import get_db
+from database import get_conn
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ CLEARABLE_TABLES = [
 
 @router.post("/api/data/reset")
 def reset_data():
-    db = get_db()
+    db = get_conn()
     for table in CLEARABLE_TABLES:
         db.execute(f"DELETE FROM {table}")
     db.commit()
