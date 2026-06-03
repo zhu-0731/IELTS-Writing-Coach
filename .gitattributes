@@ -1,0 +1,3 @@
+# 统一使用 LF 行尾（避免 Windows/Mac 混用问题）
+* text=auto eol=lf
+*.bat text eol=crlf
