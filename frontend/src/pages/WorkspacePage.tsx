@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createEssay, updateEssay } from '../api/client'
+import { copy } from '../i18n'
 import PromptPanel from '../components/workspace/PromptPanel'
 import AISidebar from '../components/workspace/AISidebar'
+import Button from '../components/ui/Button'
 
 type TaskType = 'task1' | 'task2'
+type SidebarTab = 'hint' | 'idea' | 'expression'
+
+const c = copy.workspace
 
 function countWords(text: string): number {
   return text.trim() === '' ? 0 : text.trim().split(/\s+/).length
@@ -15,13 +20,24 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`
 }
 
+const MIN_LEFT = 200
+const MAX_LEFT = 480
+const MIN_RIGHT = 260
+const MAX_RIGHT = 600
+const SIDEBAR_COLLAPSED_W = 48
+
 export default function WorkspacePage() {
   const [taskType, setTaskType] = useState<TaskType>('task2')
   const [questionType, setQuestionType] = useState('')
   const [prompt, setPrompt] = useState('')
   const [content, setContent] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [activeTab, setActiveTab] = useState<SidebarTab>('hint')
   const [showDiagModal, setShowDiagModal] = useState(false)
+
+  const [leftWidth, setLeftWidth] = useState(300)
+  const [rightWidth, setRightWidth] = useState(340)
+  const [isResizing, setIsResizing] = useState(false)
 
   const [essayId, setEssayId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -31,13 +47,60 @@ export default function WorkspacePage() {
   const [timerRunning, setTimerRunning] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const wordCount = countWords(content)
+  const leftDrag = useRef({ active: false, startX: 0, startW: 0 })
+  const rightDrag = useRef({ active: false, startX: 0, startW: 0 })
 
-  const handleContentChange = (val: string) => {
-    setContent(val)
-    if (!timerRunning && val.length > 0) setTimerRunning(true)
+  const wordCount = countWords(content)
+  const targetWords = taskType === 'task1' ? 150 : 250
+  const maxWords = taskType === 'task1' ? 200 : 300
+  const wordProgress = Math.min(100, (wordCount / maxWords) * 100)
+
+  // Global drag handlers
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (leftDrag.current.active) {
+        const d = e.clientX - leftDrag.current.startX
+        setLeftWidth(Math.max(MIN_LEFT, Math.min(MAX_LEFT, leftDrag.current.startW + d)))
+      }
+      if (rightDrag.current.active) {
+        const d = rightDrag.current.startX - e.clientX
+        setRightWidth(Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, rightDrag.current.startW + d)))
+      }
+    }
+    const onUp = () => {
+      if (leftDrag.current.active || rightDrag.current.active) {
+        leftDrag.current.active = false
+        rightDrag.current.active = false
+        document.body.style.userSelect = ''
+        document.body.style.cursor = ''
+        setIsResizing(false)
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  const startLeftDrag = (e: React.MouseEvent) => {
+    leftDrag.current = { active: true, startX: e.clientX, startW: leftWidth }
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    setIsResizing(true)
+    e.preventDefault()
   }
 
+  const startRightDrag = (e: React.MouseEvent) => {
+    rightDrag.current = { active: true, startX: e.clientX, startW: rightWidth }
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    setIsResizing(true)
+    e.preventDefault()
+  }
+
+  // Timer
   useEffect(() => {
     if (timerRunning) {
       timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000)
@@ -47,6 +110,17 @@ export default function WorkspacePage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [timerRunning])
 
+  const handleContentChange = (val: string) => {
+    setContent(val)
+    if (!timerRunning && val.length > 0) setTimerRunning(true)
+  }
+
+  const resetTimer = () => {
+    setElapsed(0)
+    setTimerRunning(false)
+  }
+
+  // Auto-save
   const doSave = useCallback(async () => {
     if (!content && !prompt) return
     setSaveStatus('saving')
@@ -95,148 +169,185 @@ export default function WorkspacePage() {
     setSaveStatus('idle')
   }
 
-  const saveStatusLabel = {
-    idle: essayId ? '草稿已保存' : '',
-    saving: '保存中…',
-    saved: '已保存 ✓',
-    error: '保存失败',
-  }[saveStatus]
+  const openTab = (tab: SidebarTab) => {
+    setActiveTab(tab)
+    setSidebarCollapsed(false)
+  }
 
-  const targetWords = taskType === 'task1' ? 150 : 250
-  const maxWords = taskType === 'task1' ? 200 : 300
+  const saveLabel = (() => {
+    if (saveStatus === 'saving') return c.saveStatus.saving
+    if (saveStatus === 'saved')  return c.saveStatus.saved
+    if (saveStatus === 'error')  return c.saveStatus.error
+    return essayId ? c.saveStatus.idleSaved : c.saveStatus.idle
+  })()
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
-      {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-100 shrink-0">
-        <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-          {(['task1', 'task2'] as TaskType[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => switchTask(t)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                taskType === t
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {t === 'task1' ? 'Task 1 小作文' : 'Task 2 大作文'}
-            </button>
-          ))}
-        </div>
+    <div className="flex flex-col h-[calc(100vh-56px)] bg-canvas">
+      {/* ── Status bar ───────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-5 py-2 bg-surface border-b border-line shrink-0">
+        {/* Save status */}
+        <span className={`text-xs ${saveStatus === 'error' ? 'text-danger' : 'text-ghost'}`}>
+          {saveLabel}
+        </span>
 
-        <div className="flex items-center gap-5 text-sm text-slate-500">
-          <span className="tabular-nums">
-            <span className={wordCount >= targetWords ? 'text-green-600 font-medium' : ''}>
+        {/* Controls */}
+        <div className="flex items-center gap-4">
+          {/* Word count */}
+          <span className="text-sm tabular-nums">
+            <span className={wordCount >= targetWords ? 'text-ok font-semibold' : 'text-dim'}>
               {wordCount}
             </span>
-            <span className="ml-1 text-xs text-slate-300">/ 建议 {targetWords}+</span>
+            <span className="text-ghost text-xs ml-1">/ {targetWords}+ 词</span>
           </span>
 
-          <button
-            onClick={() => setTimerRunning((r) => !r)}
-            className="tabular-nums font-mono hover:text-slate-700 transition-colors select-none"
-            title={timerRunning ? '暂停' : '继续'}
-          >
-            {timerRunning ? '⏸' : '▶'} {formatTime(elapsed)}
-          </button>
+          {/* Timer */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setTimerRunning((r) => !r)}
+              title={timerRunning ? c.timer.pause : c.timer.resume}
+              className="font-mono text-sm text-dim hover:text-ink transition-colors select-none tabular-nums"
+            >
+              {timerRunning ? '⏸' : '▶'} {formatTime(elapsed)}
+            </button>
+            <button
+              onClick={resetTimer}
+              title={c.timer.reset}
+              className="text-ghost hover:text-dim transition-colors select-none text-base leading-none"
+            >
+              ↺
+            </button>
+          </div>
 
-          <span className={`text-xs ${saveStatus === 'error' ? 'text-red-400' : 'text-slate-400'}`}>
-            {saveStatusLabel}
-          </span>
-
-          <button
-            onClick={doSave}
-            disabled={saveStatus === 'saving'}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
-          >
-            保存草稿
-          </button>
-
-          <button
-            onClick={() => setShowDiagModal(true)}
-            disabled={wordCount < 10}
-            className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
-          >
-            诊断全文
-          </button>
+          <Button variant="secondary" size="sm" onClick={doSave} disabled={saveStatus === 'saving'}>
+            {c.saveDraft}
+          </Button>
         </div>
       </div>
 
-      {/* 三栏主体 */}
+      {/* ── Three-column body ─────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* 题目区 */}
-        <div className="w-[280px] shrink-0 border-r border-slate-100 bg-white flex flex-col overflow-hidden">
-          <div className="px-4 pt-3 pb-0 shrink-0">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">题目</span>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <PromptPanel
-              taskType={taskType}
-              questionType={questionType}
-              prompt={prompt}
-              onQuestionTypeChange={setQuestionType}
-              onPromptChange={setPrompt}
-            />
-          </div>
+
+        {/* Left panel */}
+        <div
+          className="shrink-0 bg-surface border-r border-line flex flex-col overflow-hidden"
+          style={{ width: leftWidth }}
+        >
+          <PromptPanel
+            taskType={taskType}
+            questionType={questionType}
+            prompt={prompt}
+            onTaskChange={switchTask}
+            onQuestionTypeChange={setQuestionType}
+            onPromptChange={setPrompt}
+          />
         </div>
 
-        {/* 写作区 */}
-        <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-          <textarea
-            value={content}
-            onChange={(e) => handleContentChange(e.target.value)}
-            placeholder={taskType === 'task1'
-              ? 'The chart illustrates… 开始你的小作文'
-              : 'In recent years, … 开始你的大作文'}
-            className="flex-1 w-full px-8 py-6 text-[15px] text-slate-800 bg-transparent resize-none focus:outline-none leading-8 placeholder:text-slate-300"
-            spellCheck
-          />
-          <div className="px-8 pb-3 shrink-0">
-            <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
+        {/* Left drag handle */}
+        <div
+          className="w-1 shrink-0 cursor-col-resize bg-line hover:bg-brand-muted transition-colors"
+          onMouseDown={startLeftDrag}
+        />
+
+        {/* Editor */}
+        <div className="flex-1 flex flex-col overflow-hidden px-6 py-5 gap-3">
+          {/* Editor card */}
+          <div className="flex-1 bg-surface rounded-card border border-line shadow-editor overflow-hidden flex flex-col">
+            <textarea
+              value={content}
+              onChange={(e) => handleContentChange(e.target.value)}
+              placeholder={taskType === 'task1' ? c.editor.placeholder1 : c.editor.placeholder2}
+              className="flex-1 w-full px-7 py-6 text-[15px] text-ink bg-transparent resize-none focus:outline-none leading-8 placeholder:text-ghost/60"
+              spellCheck
+            />
+          </div>
+
+          {/* Editor bottom bar */}
+          <div className="shrink-0 flex flex-col gap-2">
+            {/* Progress bar */}
+            <div className="h-1 bg-muted rounded-full overflow-hidden">
               <div
-                className={`h-1 rounded-full transition-all duration-300 ${wordCount >= targetWords ? 'bg-green-400' : 'bg-blue-400'}`}
-                style={{ width: `${Math.min(100, (wordCount / maxWords) * 100)}%` }}
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  wordCount >= targetWords ? 'bg-ok' : 'bg-brand'
+                }`}
+                style={{ width: `${wordProgress}%` }}
               />
+            </div>
+
+            {/* Action row */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openTab('idea')}
+                className="px-3 py-1.5 text-xs font-medium text-dim hover:text-brand hover:bg-brand-light rounded-btn transition-colors"
+              >
+                💡 {c.aiIdea}
+              </button>
+              <button
+                onClick={() => openTab('expression')}
+                className="px-3 py-1.5 text-xs font-medium text-dim hover:text-brand hover:bg-brand-light rounded-btn transition-colors"
+              >
+                ✍️ {c.aiExpression}
+              </button>
+              <div className="flex-1" />
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowDiagModal(true)}
+                disabled={wordCount < 10}
+              >
+                {c.diagnose}
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* AI 侧边栏 */}
+        {/* Right drag handle — only when sidebar expanded */}
+        {!sidebarCollapsed && (
+          <div
+            className="w-1 shrink-0 cursor-col-resize bg-line hover:bg-brand-muted transition-colors"
+            onMouseDown={startRightDrag}
+          />
+        )}
+
+        {/* AI Sidebar */}
         <div
-          className={`shrink-0 border-l border-slate-100 bg-white flex flex-col overflow-hidden transition-[width] duration-200 ${
-            sidebarCollapsed ? 'w-14' : 'w-[360px]'
-          }`}
+          className={[
+            'shrink-0 border-l border-line bg-surface flex flex-col overflow-hidden',
+            !isResizing ? 'transition-[width] duration-200' : '',
+          ].join(' ')}
+          style={{ width: sidebarCollapsed ? SIDEBAR_COLLAPSED_W : rightWidth }}
         >
           <AISidebar
             collapsed={sidebarCollapsed}
             onToggle={() => setSidebarCollapsed((c) => !c)}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
           />
         </div>
       </div>
 
-      {/* 诊断 Modal 占位 */}
+      {/* ── Diagnosis modal ───────────────────────────────────────── */}
       {showDiagModal && (
         <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setShowDiagModal(false) }}
         >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8">
-            <h3 className="text-lg font-bold text-slate-800 mb-2">诊断全文</h3>
-            <p className="text-sm text-slate-500 mb-6">
-              AI 诊断功能将在 Phase 4 实现。届时将输出估分、最大失分点、最该改的三句话等结构化诊断结果。
-            </p>
-            <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-500 space-y-1.5">
-              <p>当前字数：<strong>{wordCount}</strong> 词</p>
-              {essayId && <p className="text-xs text-slate-400 font-mono">草稿 ID：{essayId}</p>}
+          <div className="bg-surface rounded-panel shadow-panel w-full max-w-lg p-8">
+            <h3 className="text-lg font-semibold text-ink mb-2">{c.diagModal.title}</h3>
+            <p className="text-sm text-dim mb-6 leading-relaxed">{c.diagModal.desc}</p>
+
+            <div className="bg-muted rounded-card p-4 text-sm text-dim space-y-1.5">
+              <p>{c.diagModal.wordCount(wordCount)}</p>
+              {essayId && (
+                <p className="text-xs text-ghost font-mono">
+                  {c.diagModal.draftId}：{essayId}
+                </p>
+              )}
             </div>
+
             <div className="flex justify-end mt-6">
-              <button
-                onClick={() => setShowDiagModal(false)}
-                className="px-5 py-2 bg-blue-500 text-white text-sm font-medium rounded-xl hover:bg-blue-600 transition-colors"
-              >
-                关闭
-              </button>
+              <Button variant="primary" onClick={() => setShowDiagModal(false)}>
+                {c.diagModal.close}
+              </Button>
             </div>
           </div>
         </div>
