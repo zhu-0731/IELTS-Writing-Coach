@@ -38,7 +38,6 @@ function HintCardView({
   total: number
   onAction: (a: Action) => void
 }) {
-  const [showRef, setShowRef] = useState(false)
   const items      = parseJson<string[]>(card.items_json, [])
   const logicChain = parseJson<string[]>(card.zh_logic_chain_json, [])
   const errors     = parseJson<string[]>(card.common_errors_json, [])
@@ -46,68 +45,67 @@ function HintCardView({
   const typeName   = c.typeLabel[card.type as keyof typeof c.typeLabel] ?? card.type
 
   const handleAction = (action: Action) => {
-    if (action === 'see_ref') {
-      setShowRef((v) => !v)
-    }
+    // 'see_ref' is no longer used — pattern is always visible
     onAction(action)
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Header */}
+      {/* Header: type + mastery + card index */}
       <div className="flex items-center justify-between gap-2">
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${typeColor}`}>
           {typeName}
         </span>
-        <span className="text-[11px] text-ghost tabular-nums">{c.cardOf(idx + 1, total)}</span>
+        <div className="flex items-center gap-2">
+          <div className="w-14 h-1 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-1 bg-brand rounded-full"
+              style={{ width: `${card.mastery_score * 100}%` }}
+            />
+          </div>
+          <span className="text-[11px] text-ghost tabular-nums">{c.cardOf(idx + 1, total)}</span>
+        </div>
       </div>
 
-      {/* Name + goal */}
+      {/* ── Core content: pattern shown directly ── */}
+      {card.pattern && (
+        <div className="bg-brand-light border border-brand-muted rounded-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold text-brand mb-1.5">
+            {card.type === 'pattern' ? '句型骨架' : card.type === 'collocation' ? '搭配词块' : '练习表达'}
+          </p>
+          <p className="text-sm font-mono text-ink leading-relaxed break-words">{card.pattern}</p>
+        </div>
+      )}
+
+      {/* Example sentences (when seed resource has items) */}
+      {items.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold text-ghost uppercase tracking-wide">例句</p>
+          {items.slice(0, 2).map((item, i) => (
+            <p key={i} className="text-xs text-dim leading-relaxed pl-2 border-l-2 border-line">
+              {item}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* Name + goal — secondary context, shown below the actionable content */}
       <div>
-        <p className="text-sm font-semibold text-ink leading-snug">{card.name}</p>
-        <p className="text-xs text-dim mt-1 leading-relaxed">{card.zh_goal}</p>
+        <p className="text-xs font-semibold text-ink leading-snug">{card.name}</p>
+        {card.zh_goal && (
+          <p className="text-[11px] text-ghost mt-0.5 leading-relaxed">{card.zh_goal}</p>
+        )}
       </div>
 
-      {/* Logic chain */}
+      {/* Logic chain (for logic_template type) */}
       {logicChain.length > 0 && (
         <div className="bg-muted rounded-card p-3">
-          <p className="text-[10px] font-semibold text-ghost uppercase tracking-wide mb-2">
-            逻辑链
-          </p>
+          <p className="text-[10px] font-semibold text-ghost uppercase tracking-wide mb-2">逻辑链</p>
           <ol className="space-y-1">
             {logicChain.map((step, i) => (
               <li key={i} className="text-xs text-dim leading-relaxed">{step}</li>
             ))}
           </ol>
-        </div>
-      )}
-
-      {/* Reference toggle */}
-      {(card.pattern || items.length > 0) && (
-        <div>
-          <button
-            onClick={() => handleAction('see_ref')}
-            className="text-xs font-medium text-brand hover:text-brand-hover flex items-center gap-1 transition-colors"
-          >
-            {showRef ? c.hideRef : c.showRef}
-            <span className="text-[10px]">{showRef ? '▲' : '▼'}</span>
-          </button>
-          {showRef && (
-            <div className="mt-2 bg-brand-light rounded-card p-3 space-y-2 border border-brand-muted">
-              {card.pattern && (
-                <p className="text-xs font-mono text-brand leading-relaxed break-words">
-                  {card.pattern}
-                </p>
-              )}
-              {items.length > 0 && (
-                <ul className="space-y-1">
-                  {items.map((item, i) => (
-                    <li key={i} className="text-xs text-dim leading-relaxed">{item}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -122,19 +120,6 @@ function HintCardView({
           </ul>
         </div>
       )}
-
-      {/* Mastery bar */}
-      <div className="flex items-center gap-1.5">
-        <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-1 bg-brand rounded-full transition-all"
-            style={{ width: `${card.mastery_score * 100}%` }}
-          />
-        </div>
-        <span className="text-[10px] text-ghost whitespace-nowrap">
-          {c.masteryLabel[card.mastery as keyof typeof c.masteryLabel] ?? card.mastery}
-        </span>
-      </div>
 
       {/* Actions */}
       <div className="grid grid-cols-3 gap-1.5 pt-1">
