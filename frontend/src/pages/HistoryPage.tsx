@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listEssays, getEssayContent, deleteEssay, type EssayListItem } from '../api/client'
+import { listEssays, getEssayContent, deleteEssay, generatePractice, type EssayListItem } from '../api/client'
 import { copy } from '../i18n'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -95,6 +95,7 @@ function EssayCard({
   const navigate = useNavigate()
   const [exporting, setExporting] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  const [practicing, setPracticing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -229,6 +230,23 @@ function EssayCard({
         >
           {restoring ? '恢复中…' : c.restore}
         </button>
+        {item.estimated_band && (
+          <button
+            onClick={async () => {
+              setPracticing(true)
+              try {
+                const res = await generatePractice({ essay_id: item.essay_id, mode: 'cloze' })
+                navigate(`/practice/${res.session_id}`)
+              } finally {
+                setPracticing(false)
+              }
+            }}
+            disabled={practicing}
+            className="text-xs text-ok hover:text-ok/80 font-medium transition-colors disabled:opacity-50"
+          >
+            {practicing ? '生成中…' : copy.practice.practiceBtn}
+          </button>
+        )}
         <div className="ml-auto">
           {confirmDelete ? (
             <div className="flex items-center gap-2">

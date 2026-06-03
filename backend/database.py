@@ -98,6 +98,30 @@ def init_db() -> None:
             next_training_task      TEXT NOT NULL DEFAULT '',
             created_at              TEXT NOT NULL DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS practice_sessions (
+            session_id  TEXT PRIMARY KEY,
+            essay_id    TEXT NOT NULL,
+            mode        TEXT NOT NULL DEFAULT 'cloze',
+            status      TEXT NOT NULL DEFAULT 'in_progress',
+            score       INTEGER NOT NULL DEFAULT 0,
+            total       INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS practice_items (
+            item_id             TEXT PRIMARY KEY,
+            session_id          TEXT NOT NULL,
+            order_idx           INTEGER NOT NULL DEFAULT 0,
+            category            TEXT NOT NULL DEFAULT 'vocabulary',
+            sentence_original   TEXT NOT NULL DEFAULT '',
+            sentence_display    TEXT NOT NULL DEFAULT '',
+            answer              TEXT NOT NULL DEFAULT '',
+            hint_zh             TEXT NOT NULL DEFAULT '',
+            explanation_zh      TEXT NOT NULL DEFAULT '',
+            created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+        );
     """)
     # Seed initial language resources in a separate transaction
     with conn:

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { runDiagnosis, type DiagnosisResult } from '../../api/client'
+import { useNavigate } from 'react-router-dom'
+import { runDiagnosis, generatePractice, type DiagnosisResult } from '../../api/client'
 import { copy } from '../../i18n'
 import Button from '../ui/Button'
 
@@ -33,9 +34,11 @@ export default function DiagnosisModal({
   wordCount,
   onClose,
 }: Props) {
+  const navigate = useNavigate()
   const [phase, setPhase] = useState<Phase>('loading')
   const [result, setResult] = useState<DiagnosisResult | null>(null)
   const [error, setError] = useState('')
+  const [startingPractice, setStartingPractice] = useState(false)
 
   const diagnose = async () => {
     setPhase('loading')
@@ -203,7 +206,27 @@ export default function DiagnosisModal({
 
         {/* Footer */}
         {phase !== 'loading' && (
-          <div className="shrink-0 px-6 py-4 border-t border-line flex justify-end">
+          <div className="shrink-0 px-6 py-4 border-t border-line flex items-center justify-between gap-3">
+            {phase === 'result' && essayId ? (
+              <button
+                onClick={async () => {
+                  setStartingPractice(true)
+                  try {
+                    const res = await generatePractice({ essay_id: essayId, mode: 'cloze' })
+                    onClose()
+                    navigate(`/practice/${res.session_id}`)
+                  } finally {
+                    setStartingPractice(false)
+                  }
+                }}
+                disabled={startingPractice}
+                className="px-4 py-2 text-sm font-medium rounded-btn bg-ok-light text-ok hover:bg-ok/20 disabled:opacity-50 transition-colors"
+              >
+                {startingPractice ? copy.practice.generating : `✏️ ${copy.practice.diagStartBtn}`}
+              </button>
+            ) : (
+              <span />
+            )}
             <Button variant="primary" onClick={onClose}>{c.close}</Button>
           </div>
         )}
