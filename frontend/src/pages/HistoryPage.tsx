@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { listEssays, getEssayContent, type EssayListItem } from '../api/client'
+import { useNavigate } from 'react-router-dom'
+import { listEssays, getEssayContent, deleteEssay, type EssayListItem } from '../api/client'
 import { copy } from '../i18n'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -84,8 +85,18 @@ function buildMarkdown(essay: EssayListItem, content: string): string {
   return lines.join('\n')
 }
 
-function EssayCard({ item }: { item: EssayListItem }) {
+function EssayCard({
+  item,
+  onDelete,
+}: {
+  item: EssayListItem
+  onDelete: (id: string) => void
+}) {
+  const navigate = useNavigate()
   const [exporting, setExporting] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const problems = parseProblems(item.main_problems_json)
   const taskLabel = item.task_type === 'task1' ? c.task1 : c.task2
@@ -99,6 +110,40 @@ function EssayCard({ item }: { item: EssayListItem }) {
       triggerDownload(`ielts-${item.task_type}-${dateStr}.md`, md)
     } finally {
       setExporting(false)
+    }
+  }
+
+  const handleRestore = async () => {
+    setRestoring(true)
+    try {
+      const essay = await getEssayContent(item.essay_id)
+      // Clear task slot and write restored data
+      const taskType = item.task_type as 'task1' | 'task2'
+      sessionStorage.setItem('workspace_active_task', taskType)
+      sessionStorage.setItem(
+        `workspace_draft_${taskType}`,
+        JSON.stringify({
+          questionType: item.question_type ?? '',
+          prompt: item.prompt ?? '',
+          content: essay.content,
+          essayId: item.essay_id,
+          elapsed: 0,
+        }),
+      )
+      navigate('/workspace')
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await deleteEssay(item.essay_id)
+      onDelete(item.essay_id)
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
     }
   }
 
@@ -169,7 +214,7 @@ function EssayCard({ item }: { item: EssayListItem }) {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2 pt-1 border-t border-line/50">
+      <div className="flex items-center gap-3 pt-1 border-t border-line/50 flex-wrap">
         <button
           onClick={handleExport}
           disabled={exporting}
@@ -177,6 +222,40 @@ function EssayCard({ item }: { item: EssayListItem }) {
         >
           {exporting ? '导出中…' : c.exportMd}
         </button>
+        <button
+          onClick={handleRestore}
+          disabled={restoring}
+          className="text-xs text-brand hover:text-brand-hover font-medium transition-colors disabled:opacity-50"
+        >
+          {restoring ? '恢复中…' : c.restore}
+        </button>
+        <div className="ml-auto">
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-dim">确认删除？</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-[11px] text-danger hover:text-danger/80 font-medium transition-colors disabled:opacity-50"
+              >
+                {deleting ? '删除中…' : '确认'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-[11px] text-ghost hover:text-dim transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-[11px] text-ghost hover:text-danger transition-colors"
+            >
+              {c.delete}
+            </button>
+          )}
+        </div>
       </div>
     </Card>
   )
@@ -197,6 +276,11 @@ export default function HistoryPage() {
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [])
+
+  const handleDelete = (id: string) => {
+    setItems((prev) => prev.filter((e) => e.essay_id !== id))
+    setTotal((n) => n - 1)
+  }
 
   return (
     <div className="w-full max-w-[900px] mx-auto px-6 md:px-8 py-8">
@@ -220,7 +304,7 @@ export default function HistoryPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {items.map((item) => (
-            <EssayCard key={item.essay_id} item={item} />
+            <EssayCard key={item.essay_id} item={item} onDelete={handleDelete} />
           ))}
         </div>
       )}

@@ -45,3 +45,18 @@ def list_resources(
 
     db.close()
     return {"total": total, "items": [dict(r) for r in rows]}
+
+
+@router.delete("/api/resources/{resource_id}", status_code=204)
+def delete_resource(resource_id: str):
+    from fastapi import HTTPException
+    db = get_conn()
+    row = db.execute(
+        "SELECT resource_id FROM language_resources WHERE resource_id = ?", (resource_id,)
+    ).fetchone()
+    if not row:
+        db.close()
+        raise HTTPException(status_code=404, detail="Resource not found")
+    db.execute("DELETE FROM language_resources WHERE resource_id = ?", (resource_id,))
+    db.commit()
+    db.close()

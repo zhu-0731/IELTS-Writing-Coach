@@ -24,6 +24,7 @@ export const copy = {
     templates: '我的模板',
     history: '历史记录',
     startWriting: '开始写作',
+    startNew: '开始新写作',
     settings: '设置',
   },
 
@@ -139,7 +140,7 @@ export const copy = {
       selectType: '请选择题型…',
       placeholder1: '粘贴题目描述，或描述图表内容…',
       placeholder2: '粘贴题目，例如：Some people think that…',
-      imageUpload: '图片上传（Phase 5）',
+      imageUpload: '图片上传',
       imageUploadHint: '需开启 Vision 模型支持',
     },
     requirements: {
@@ -148,7 +149,6 @@ export const copy = {
         '最少 150 词',
         '概述图表的主要特征',
         '对比关键数据，避免主观评价',
-        '使用正式、客观的语言风格',
       ],
       task2: [
         '最少 250 词',
@@ -376,6 +376,8 @@ export const copy = {
     noDiag: '未诊断',
     band: (b: string) => `预估 ${b}`,
     exportMd: '导出 MD',
+    restore: '恢复草稿',
+    delete: '删除',
     diagSummary: '诊断摘要',
     nextTask: '训练建议',
     problems: '失分点',
