@@ -126,6 +126,21 @@ export const recordHintAction = (
   body: JSON.stringify(data),
 })
 
+export interface MatchHintsResult {
+  context: string
+  hints: HintCard[]
+}
+
+export const matchHints = (data: {
+  prompt: string
+  task_type: string
+  essay_id?: string | null
+  limit?: number
+}) => request<MatchHintsResult>('/hints/match', {
+  method: 'POST',
+  body: JSON.stringify(data),
+})
+
 // Idea Coach
 export interface IdeaStance {
   label: string
