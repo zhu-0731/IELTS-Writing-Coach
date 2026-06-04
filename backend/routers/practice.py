@@ -59,6 +59,30 @@ def get_session(session_id: str):
         conn.close()
 
 
+@router.delete("/session/{session_id}")
+def delete_session(session_id: str):
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT session_id FROM practice_sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Session not found")
+        with conn:
+            conn.execute(
+                "DELETE FROM practice_items WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.execute(
+                "DELETE FROM practice_sessions WHERE session_id = ?",
+                (session_id,),
+            )
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
 @router.get("/essay/{essay_id}/latest")
 def get_latest_for_essay(essay_id: str):
     conn = get_conn()

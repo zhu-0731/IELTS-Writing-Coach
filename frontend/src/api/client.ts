@@ -378,6 +378,9 @@ export const completePracticeSession = (sessionId: string, score: number) =>
     body: JSON.stringify({ score }),
   })
 
+export const deletePracticeSession = (sessionId: string) =>
+  request<{ ok: boolean }>(`/practice/session/${sessionId}`, { method: 'DELETE' })
+
 export const listPracticeSessions = (limit = 10) =>
   request<PracticeSessionSummary[]>(`/practice/sessions?limit=${limit}`)
 

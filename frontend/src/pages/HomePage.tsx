@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getHomeSummary, listPracticeSessions, type HomeSummary, type PracticeSessionSummary } from '../api/client'
+import {
+  deletePracticeSession,
+  getHomeSummary,
+  listPracticeSessions,
+  type HomeSummary,
+  type PracticeSessionSummary,
+} from '../api/client'
 import { copy } from '../i18n'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -22,6 +28,7 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [summary, setSummary] = useState<HomeSummary | null>(null)
   const [sessions, setSessions] = useState<PracticeSessionSummary[]>([])
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
 
   useEffect(() => {
     getHomeSummary().then(setSummary).catch(() => {})
@@ -39,6 +46,20 @@ export default function HomePage() {
     if (profile.main_task === 'task2') return c.profile.task2
     return c.profile.both
   })()
+
+  const handleDeleteSession = async (sessionId: string, e: MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm(cp.deleteConfirm)) return
+    setDeletingSessionId(sessionId)
+    try {
+      await deletePracticeSession(sessionId)
+      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId))
+    } catch {
+      window.alert(cp.deleteError)
+    } finally {
+      setDeletingSessionId(null)
+    }
+  }
 
   return (
     <div className="w-full max-w-[1180px] mx-auto px-6 md:px-8 py-8">
@@ -273,6 +294,13 @@ export default function HomePage() {
                       </div>
                       <p className="text-xs text-dim truncate">{promptExcerpt}</p>
                     </div>
+                    <button
+                      onClick={(e) => handleDeleteSession(s.session_id, e)}
+                      disabled={deletingSessionId === s.session_id}
+                      className="shrink-0 text-[11px] text-ghost hover:text-danger disabled:opacity-50 transition-colors"
+                    >
+                      {deletingSessionId === s.session_id ? cp.deleting : cp.delete}
+                    </button>
                     {s.status === 'completed' && pct !== null ? (
                       <div className="shrink-0 text-right">
                         <span className={`text-sm font-bold tabular-nums ${pct >= 70 ? 'text-ok' : pct >= 50 ? 'text-warn' : 'text-danger'}`}>

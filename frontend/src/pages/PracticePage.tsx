@@ -4,6 +4,7 @@ import {
   getPracticeSession,
   completePracticeSession,
   generatePractice,
+  deletePracticeSession,
   type PracticeItem,
   type PracticeSession,
 } from '../api/client'
@@ -154,12 +155,16 @@ function ResultsScreen({
   wrongItems,
   essayId,
   mode,
+  deleting,
+  onDelete,
 }: {
   score: number
   total: number
   wrongItems: { item: PracticeItem; userAnswer: string }[]
   essayId: string
   mode: string
+  deleting: boolean
+  onDelete: () => void
 }) {
   const navigate = useNavigate()
   const [retrying, setRetrying] = useState(false)
@@ -236,6 +241,13 @@ function ResultsScreen({
           {c.back}
         </button>
         <button
+          onClick={onDelete}
+          disabled={deleting}
+          className="px-5 py-2 text-sm text-danger hover:text-danger border border-danger/30 rounded-btn disabled:opacity-50 transition-colors"
+        >
+          {deleting ? c.deleting : c.delete}
+        </button>
+        <button
           onClick={handleRetry}
           disabled={retrying}
           className="px-5 py-2 text-sm font-medium rounded-btn bg-brand text-white hover:bg-brand-hover disabled:opacity-50 transition-colors"
@@ -262,6 +274,7 @@ export default function PracticePage() {
   const [genError, setGenError] = useState('')
   const [error, setError] = useState('')
   const [session, setSession] = useState<PracticeSession | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const [currentIdx, setCurrentIdx] = useState(0)
   const [inputValue, setInputValue] = useState('')
@@ -369,6 +382,19 @@ export default function PracticePage() {
     }
   }
 
+  const handleDelete = async () => {
+    if (!session || deleting) return
+    if (!window.confirm(c.deleteConfirm)) return
+    setDeleting(true)
+    try {
+      await deletePracticeSession(session.session_id)
+      navigate('/', { replace: true })
+    } catch {
+      window.alert(c.deleteError)
+      setDeleting(false)
+    }
+  }
+
   // ── Generating a new session ─────────────────────────────────────────────
   if (isNew && generating) {
     return (
@@ -429,6 +455,8 @@ export default function PracticePage() {
         wrongItems={wrongItems}
         essayId={session.essay_id}
         mode={session.mode}
+        deleting={deleting}
+        onDelete={handleDelete}
       />
     )
   }
@@ -454,6 +482,13 @@ export default function PracticePage() {
           <h1 className="text-base font-semibold text-ink">{title}</h1>
           <p className="text-xs text-ghost mt-0.5">{c.progress(currentIdx + 1, session.total)}</p>
         </div>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="ml-auto text-xs text-ghost hover:text-danger disabled:opacity-50 transition-colors"
+        >
+          {deleting ? c.deleting : c.delete}
+        </button>
       </div>
 
       {/* Progress bar */}
