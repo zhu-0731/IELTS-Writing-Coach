@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   deleteDiagnosis,
@@ -34,8 +34,7 @@ function formatDate(iso: string): string {
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
-  const date = formatDate(iso)
-  return `${date} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `${formatDate(iso)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function triggerDownload(filename: string, content: string) {
@@ -52,11 +51,10 @@ function triggerDownload(filename: string, content: string) {
 
 function buildMarkdown(essay: EssayListItem, content: string): string {
   const taskLabel = essay.task_type === 'task1' ? c.task1 : c.task2
-  const dateStr = formatDate(essay.updated_at)
   const problems = parseProblems(essay.main_problems_json)
-
   const lines: string[] = []
-  lines.push(`# ${taskLabel} - ${dateStr}`)
+
+  lines.push(`# ${taskLabel} - ${formatDate(essay.updated_at)}`)
   lines.push('')
   if (essay.question_type) lines.push(`**题型**: ${essay.question_type}`)
   if (essay.prompt) {
@@ -114,18 +112,20 @@ function EssayCard({
   const [selectedDiagnosisId, setSelectedDiagnosisId] = useState('')
   const [loadingDiagnoses, setLoadingDiagnoses] = useState(false)
   const [openingDiagnosis, setOpeningDiagnosis] = useState(false)
-  const [confirmDeleteDiagnosis, setConfirmDeleteDiagnosis] = useState(false)
   const [deletingDiagnosis, setDeletingDiagnosis] = useState(false)
+  const [deletingDiagnosisId, setDeletingDiagnosisId] = useState('')
+  const [latestBand, setLatestBand] = useState(item.estimated_band)
+
   const problems = parseProblems(item.main_problems_json)
   const taskLabel = item.task_type === 'task1' ? c.task1 : c.task2
+  const hasDiagnosis = Boolean(latestBand)
 
   const handleExport = async () => {
     setExporting(true)
     try {
       const essay = await getEssayContent(item.essay_id)
       const md = buildMarkdown(item, essay.content)
-      const dateStr = formatDate(item.updated_at)
-      triggerDownload(`ielts-${item.task_type}-${dateStr}.md`, md)
+      triggerDownload(`ielts-${item.task_type}-${formatDate(item.updated_at)}.md`, md)
     } finally {
       setExporting(false)
     }
@@ -154,7 +154,9 @@ function EssayCard({
   }
 
   const openDiagnosis = async (diagnosisId: string) => {
+    if (!diagnosisId) return
     setOpeningDiagnosis(true)
+    setSelectedDiagnosisId(diagnosisId)
     try {
       const [essay, diagnosis] = await Promise.all([
         getEssayContent(item.essay_id),
@@ -178,6 +180,7 @@ function EssayCard({
   const refreshDiagnoses = async () => {
     const data = await listDiagnosesForEssay(item.essay_id)
     setDiagnoses(data.items)
+    setLatestBand(data.items[0]?.estimated_band ?? null)
     setSelectedDiagnosisId((current) => {
       if (data.items.some((diag) => diag.diagnosis_id === current)) return current
       return data.items[0]?.diagnosis_id ?? ''
@@ -186,32 +189,37 @@ function EssayCard({
   }
 
   const handleViewDiagnosis = async () => {
-    if (diagnoses && diagnoses.length > 1) {
-      await openDiagnosis(selectedDiagnosisId || diagnoses[0].diagnosis_id)
-      return
-    }
-
     setLoadingDiagnoses(true)
     try {
-      const items = await refreshDiagnoses()
-      if (items.length > 0) {
-        setSelectedDiagnosisId(items[0].diagnosis_id)
-      }
+      await refreshDiagnoses()
     } finally {
       setLoadingDiagnoses(false)
     }
   }
 
-  const handleDeleteDiagnosis = async () => {
-    if (!selectedDiagnosisId) return
+  const handleDeleteDiagnosis = async (diagnosisId: string) => {
+    if (!diagnosisId) return
     setDeletingDiagnosis(true)
+    setDeletingDiagnosisId(diagnosisId)
     try {
-      await deleteDiagnosis(selectedDiagnosisId)
+      await deleteDiagnosis(diagnosisId)
       await refreshDiagnoses()
-      setConfirmDeleteDiagnosis(false)
     } finally {
       setDeletingDiagnosis(false)
+      setDeletingDiagnosisId('')
     }
+  }
+
+  const handleDiagnosisContextMenu = async (
+    event: MouseEvent<HTMLButtonElement>,
+    diagnosis: DiagnosisSummaryItem,
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (deletingDiagnosis) return
+    const ok = window.confirm(`删除 ${formatDateTime(diagnosis.created_at)} 的诊断记录？`)
+    if (!ok) return
+    await handleDeleteDiagnosis(diagnosis.diagnosis_id)
   }
 
   const handleDelete = async () => {
@@ -243,12 +251,12 @@ function EssayCard({
 
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-xs text-ghost">{c.words(item.word_count)}</span>
-        {item.estimated_band ? (
-          <Badge variant="green" className="text-[10px]">{c.band(item.estimated_band)}</Badge>
+        {hasDiagnosis ? (
+          <Badge variant="green" className="text-[10px]">{c.band(latestBand || 'N/A')}</Badge>
         ) : (
           <span className="text-[11px] text-ghost italic">{c.noDiag}</span>
         )}
-        {problems.length > 0 && (
+        {hasDiagnosis && problems.length > 0 && (
           <div className="flex gap-1 flex-wrap">
             {problems.map((p, i) => (
               <span
@@ -266,7 +274,7 @@ function EssayCard({
         )}
       </div>
 
-      {item.estimated_band && (
+      {hasDiagnosis && (
         <div>
           <button
             onClick={() => setExpanded((v) => !v)}
@@ -274,64 +282,49 @@ function EssayCard({
           >
             {expanded ? '收起' : `${c.diagSummary} ▾`}
           </button>
-          {expanded && (
-            <div className="mt-2 space-y-2">
-              {item.next_training_task && (
-                <div className="px-3 py-2 bg-brand-light rounded-md">
-                  <p className="text-[10px] font-semibold text-brand mb-0.5">{c.nextTask}</p>
-                  <p className="text-xs text-dim">{item.next_training_task}</p>
-                </div>
-              )}
+          {expanded && item.next_training_task && (
+            <div className="mt-2 px-3 py-2 bg-brand-light rounded-md">
+              <p className="text-[10px] font-semibold text-brand mb-0.5">{c.nextTask}</p>
+              <p className="text-xs text-dim">{item.next_training_task}</p>
             </div>
           )}
         </div>
       )}
 
       {diagnoses && diagnoses.length > 0 && (
-        <div className="flex items-center gap-2 rounded-card bg-muted px-2 py-2">
-          <select
-            value={selectedDiagnosisId}
-            onChange={(e) => setSelectedDiagnosisId(e.target.value)}
-            className="min-w-0 flex-1 bg-surface border border-line rounded px-2 py-1 text-xs text-dim"
-          >
-            {diagnoses.map((diag) => (
-              <option key={diag.diagnosis_id} value={diag.diagnosis_id}>
-                {formatDateTime(diag.created_at)} · {diag.estimated_band || 'N/A'}
-              </option>
-            ))}
-          </select>
-          {confirmDeleteDiagnosis ? (
-            <>
-              <button
-                onClick={handleDeleteDiagnosis}
-                disabled={deletingDiagnosis || !selectedDiagnosisId}
-                className="text-xs text-danger hover:text-danger/80 font-medium disabled:opacity-50"
-              >
-                {deletingDiagnosis ? '删除中...' : '确认'}
-              </button>
-              <button
-                onClick={() => setConfirmDeleteDiagnosis(false)}
-                className="text-xs text-ghost hover:text-dim font-medium"
-              >
-                取消
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setConfirmDeleteDiagnosis(true)}
-              disabled={!selectedDiagnosisId}
-              className="text-xs text-ghost hover:text-danger font-medium disabled:opacity-50"
-            >
-              删除
-            </button>
-          )}
-          <button
-            onClick={() => openDiagnosis(selectedDiagnosisId)}
-            disabled={openingDiagnosis || !selectedDiagnosisId}
-            className="text-xs text-brand hover:text-brand-hover font-medium disabled:opacity-50"
-          >
-            查看
-          </button>
+        <div className="rounded-card bg-muted px-2 py-2 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-ghost">诊断记录</span>
+            <span className="text-[10px] text-ghost">左键查看，右键删除</span>
+          </div>
+          <div className="max-h-36 overflow-y-auto space-y-1">
+            {diagnoses.map((diag) => {
+              const active = diag.diagnosis_id === selectedDiagnosisId
+              const deletingThis = deletingDiagnosisId === diag.diagnosis_id
+              return (
+                <button
+                  key={diag.diagnosis_id}
+                  onClick={() => openDiagnosis(diag.diagnosis_id)}
+                  onContextMenu={(event) => handleDiagnosisContextMenu(event, diag)}
+                  disabled={openingDiagnosis || deletingDiagnosis}
+                  className={[
+                    'w-full flex items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors',
+                    active
+                      ? 'border-brand bg-brand-light'
+                      : 'border-line bg-surface hover:border-brand/50',
+                    'disabled:opacity-60',
+                  ].join(' ')}
+                >
+                  <span className="min-w-0 flex-1 truncate text-xs text-dim">
+                    {formatDateTime(diag.created_at)} · {diag.estimated_band || 'N/A'}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-ghost">
+                    {deletingThis ? '删除中...' : '右键删除'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -350,7 +343,7 @@ function EssayCard({
         >
           {restoring ? '恢复中...' : c.restore}
         </button>
-        {item.estimated_band && (
+        {hasDiagnosis && (
           <>
             <button
               onClick={handleViewDiagnosis}
