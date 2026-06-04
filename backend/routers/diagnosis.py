@@ -188,6 +188,23 @@ def get_diagnosis(diagnosis_id: str):
         conn.close()
 
 
+@router.delete("/{diagnosis_id}")
+def delete_diagnosis(diagnosis_id: str):
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT diagnosis_id, essay_id FROM diagnoses WHERE diagnosis_id = ?",
+            (diagnosis_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Diagnosis not found")
+        with conn:
+            conn.execute("DELETE FROM diagnoses WHERE diagnosis_id = ?", (diagnosis_id,))
+        return {"ok": True, "essay_id": row["essay_id"]}
+    finally:
+        conn.close()
+
+
 @router.post("/full")
 def full_diagnosis(body: DiagnosisRequest):
     if not body.content.strip():

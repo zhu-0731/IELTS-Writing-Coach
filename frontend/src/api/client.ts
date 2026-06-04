@@ -299,6 +299,9 @@ export const listDiagnosesForEssay = (essayId: string) =>
 export const getDiagnosis = (diagnosisId: string) =>
   request<DiagnosisResult>(`/diagnosis/${diagnosisId}`)
 
+export const deleteDiagnosis = (diagnosisId: string) =>
+  request<{ ok: boolean; essay_id: string }>(`/diagnosis/${diagnosisId}`, { method: 'DELETE' })
+
 // Home summary
 export interface HomeResource {
   resource_id: string

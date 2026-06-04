@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  deleteDiagnosis,
   deleteEssay,
   getDiagnosis,
   getEssayContent,
@@ -113,6 +114,8 @@ function EssayCard({
   const [selectedDiagnosisId, setSelectedDiagnosisId] = useState('')
   const [loadingDiagnoses, setLoadingDiagnoses] = useState(false)
   const [openingDiagnosis, setOpeningDiagnosis] = useState(false)
+  const [confirmDeleteDiagnosis, setConfirmDeleteDiagnosis] = useState(false)
+  const [deletingDiagnosis, setDeletingDiagnosis] = useState(false)
   const problems = parseProblems(item.main_problems_json)
   const taskLabel = item.task_type === 'task1' ? c.task1 : c.task2
 
@@ -172,6 +175,16 @@ function EssayCard({
     }
   }
 
+  const refreshDiagnoses = async () => {
+    const data = await listDiagnosesForEssay(item.essay_id)
+    setDiagnoses(data.items)
+    setSelectedDiagnosisId((current) => {
+      if (data.items.some((diag) => diag.diagnosis_id === current)) return current
+      return data.items[0]?.diagnosis_id ?? ''
+    })
+    return data.items
+  }
+
   const handleViewDiagnosis = async () => {
     if (diagnoses && diagnoses.length > 1) {
       await openDiagnosis(selectedDiagnosisId || diagnoses[0].diagnosis_id)
@@ -180,15 +193,24 @@ function EssayCard({
 
     setLoadingDiagnoses(true)
     try {
-      const data = await listDiagnosesForEssay(item.essay_id)
-      setDiagnoses(data.items)
-      if (data.items.length === 1) {
-        await openDiagnosis(data.items[0].diagnosis_id)
-      } else if (data.items.length > 1) {
-        setSelectedDiagnosisId(data.items[0].diagnosis_id)
+      const items = await refreshDiagnoses()
+      if (items.length > 0) {
+        setSelectedDiagnosisId(items[0].diagnosis_id)
       }
     } finally {
       setLoadingDiagnoses(false)
+    }
+  }
+
+  const handleDeleteDiagnosis = async () => {
+    if (!selectedDiagnosisId) return
+    setDeletingDiagnosis(true)
+    try {
+      await deleteDiagnosis(selectedDiagnosisId)
+      await refreshDiagnoses()
+      setConfirmDeleteDiagnosis(false)
+    } finally {
+      setDeletingDiagnosis(false)
     }
   }
 
@@ -265,7 +287,7 @@ function EssayCard({
         </div>
       )}
 
-      {diagnoses && diagnoses.length > 1 && (
+      {diagnoses && diagnoses.length > 0 && (
         <div className="flex items-center gap-2 rounded-card bg-muted px-2 py-2">
           <select
             value={selectedDiagnosisId}
@@ -278,6 +300,31 @@ function EssayCard({
               </option>
             ))}
           </select>
+          {confirmDeleteDiagnosis ? (
+            <>
+              <button
+                onClick={handleDeleteDiagnosis}
+                disabled={deletingDiagnosis || !selectedDiagnosisId}
+                className="text-xs text-danger hover:text-danger/80 font-medium disabled:opacity-50"
+              >
+                {deletingDiagnosis ? '删除中...' : '确认'}
+              </button>
+              <button
+                onClick={() => setConfirmDeleteDiagnosis(false)}
+                className="text-xs text-ghost hover:text-dim font-medium"
+              >
+                取消
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmDeleteDiagnosis(true)}
+              disabled={!selectedDiagnosisId}
+              className="text-xs text-ghost hover:text-danger font-medium disabled:opacity-50"
+            >
+              删除
+            </button>
+          )}
           <button
             onClick={() => openDiagnosis(selectedDiagnosisId)}
             disabled={openingDiagnosis || !selectedDiagnosisId}
