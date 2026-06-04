@@ -103,9 +103,11 @@ const a = copy.settings.advanced
 function FeatureConfigCard({
   feature,
   initial,
+  generalBaseUrl,
 }: {
   feature: FeatureKey
   initial: FeatureSettings
+  generalBaseUrl: string
 }) {
   const [eff, setEff] = useState<FeatureSettings>(initial)
   const [form, setForm] = useState({
@@ -118,6 +120,9 @@ function FeatureConfigCard({
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // Recommend models from the feature's own base_url, or the general one when blank
+  const detected = detectProvider(form.base_url || generalBaseUrl)
 
   async function save() {
     setSaving(true)
@@ -168,10 +173,11 @@ function FeatureConfigCard({
             />
           </FieldRow>
           <FieldRow label={c.api.modelName} hint={a.fieldBlankHint}>
-            <input
-              className={inputCls}
+            <ModelSelect
               value={form.model_name}
-              onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
+              onChange={(val) => setForm((f) => ({ ...f, model_name: val }))}
+              options={detected?.models ?? []}
+              providerName={detected?.name ?? null}
               placeholder={c.api.modelPlaceholder}
             />
           </FieldRow>
@@ -222,7 +228,7 @@ function FeatureConfigCard({
 
       {/* Save */}
       <div className="mt-3 flex items-center gap-2">
-        <Button variant="secondary" size="sm" onClick={save} loading={saving}>
+        <Button type="button" variant="secondary" size="sm" onClick={save} loading={saving}>
           {saving ? c.saving : c.save}
         </Button>
         {saved && <span className="text-xs text-ok font-medium">✓ {c.saved}</span>}
@@ -379,6 +385,38 @@ export default function SettingsPage() {
                   autoComplete="off"
                 />
               </FieldRow>
+
+              {/* Advanced: per-feature LLM overrides */}
+              {features && (
+                <div className="pt-3 border-t border-line/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    className="flex items-center gap-1.5 text-sm font-medium text-dim hover:text-ink transition-colors"
+                  >
+                    <span className={`inline-block transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>›</span>
+                    {a.title}
+                  </button>
+
+                  {showAdvanced && (
+                    <div className="mt-3">
+                      <p className="text-xs text-ghost mb-4 leading-relaxed">{a.subtitle}</p>
+                      <div className="space-y-4">
+                        <FeatureConfigCard
+                          feature="diagnosis"
+                          initial={features.diagnosis}
+                          generalBaseUrl={form.base_url}
+                        />
+                        <FeatureConfigCard
+                          feature="practice"
+                          initial={features.practice}
+                          generalBaseUrl={form.base_url}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </Card>
 
@@ -431,30 +469,6 @@ export default function SettingsPage() {
             )}
           </div>
         </form>
-      )}
-
-      {/* Advanced: per-feature LLM overrides */}
-      {features && (
-        <div className="mt-5">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((v) => !v)}
-            className="flex items-center gap-1.5 text-sm font-medium text-dim hover:text-ink transition-colors"
-          >
-            <span className={`inline-block transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>›</span>
-            {a.title}
-          </button>
-
-          {showAdvanced && (
-            <Card padding="lg" className="mt-3">
-              <p className="text-xs text-ghost mb-4 leading-relaxed">{a.subtitle}</p>
-              <div className="space-y-4">
-                <FeatureConfigCard feature="diagnosis" initial={features.diagnosis} />
-                <FeatureConfigCard feature="practice" initial={features.practice} />
-              </div>
-            </Card>
-          )}
-        </div>
       )}
 
       {/* Danger zone */}
