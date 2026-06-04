@@ -89,7 +89,8 @@ def generate_practice(
         "You are an IELTS writing coach creating fill-in-the-blank exercises from a student's essay. "
         "Generate concise, targeted practice items. "
         "Each item tests ONE blank (marked as ___) of 1–6 words. "
-        "Return valid JSON only — no extra text or markdown."
+        "Keep explanation_zh under 25 Chinese characters so the response stays short. "
+        "Output ONLY a single compact JSON object — no thinking, no markdown fences, no commentary before or after."
     )
 
     if mode == 'cloze':
@@ -163,7 +164,10 @@ Rules:
             ],
             schema={},
             temperature=0.35,
-            max_tokens=2600,
+            # Reasoning models (e.g. deepseek-reasoner) spend a large, hidden
+            # token budget on chain-of-thought before emitting the answer, so
+            # a small ceiling truncates the JSON. Give generous headroom.
+            max_tokens=6000,
         )
     except Exception as e:
         raise ValueError(f"练习题生成失败：{e}") from e
