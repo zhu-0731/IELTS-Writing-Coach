@@ -118,6 +118,8 @@ def init_db() -> None:
             sentence_original   TEXT NOT NULL DEFAULT '',
             sentence_display    TEXT NOT NULL DEFAULT '',
             answer              TEXT NOT NULL DEFAULT '',
+            acceptable_answers_json TEXT NOT NULL DEFAULT '[]',
+            weak_answer         TEXT NOT NULL DEFAULT '',
             hint_zh             TEXT NOT NULL DEFAULT '',
             explanation_zh      TEXT NOT NULL DEFAULT '',
             user_answer         TEXT NOT NULL DEFAULT '',
@@ -144,6 +146,14 @@ def _ensure_practice_item_columns(conn: sqlite3.Connection) -> None:
     if "is_correct" not in cols:
         conn.execute(
             "ALTER TABLE practice_items ADD COLUMN is_correct INTEGER"
+        )
+    if "acceptable_answers_json" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN acceptable_answers_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "weak_answer" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN weak_answer TEXT NOT NULL DEFAULT ''"
         )
 
 

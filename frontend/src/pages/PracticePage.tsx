@@ -38,17 +38,37 @@ function checkAnswer(user: string, correct: string): boolean {
   return false
 }
 
+function parseJson<T>(raw: string, fallback: T): T {
+  try { return JSON.parse(raw) as T } catch { return fallback }
+}
+
+function acceptableAnswers(item: PracticeItem): string[] {
+  const parsed = parseJson<string[]>(item.acceptable_answers_json || '[]', [])
+  const answers = [item.answer, ...parsed].map((a) => a.trim()).filter(Boolean)
+  return [...new Set(answers.map((a) => a.toLowerCase()))]
+    .map((lower) => answers.find((a) => a.toLowerCase() === lower) ?? lower)
+}
+
+type ItemResult = 'pending' | 'correct' | 'replace' | 'wrong'
+
+function evaluateAnswer(user: string, item: PracticeItem): ItemResult {
+  if (item.weak_answer && checkAnswer(user, item.weak_answer)) return 'replace'
+  return acceptableAnswers(item).some((answer) => checkAnswer(user, answer))
+    ? 'correct'
+    : 'wrong'
+}
+
 // ── Sentence display with inline blank ───────────────────────────────────────
 function SentenceWithBlank({
   display,
   submitted,
   userAnswer,
-  correct,
+  result,
 }: {
   display: string
   submitted: boolean
   userAnswer: string
-  correct: boolean
+  result: ItemResult
 }) {
   const parts = display.split('___')
   if (parts.length < 2) return <span className="text-sm text-ink leading-relaxed">{display}</span>
@@ -60,8 +80,10 @@ function SentenceWithBlank({
         className={[
           'inline-block min-w-[72px] px-2 py-0.5 mx-0.5 rounded text-center font-mono text-sm',
           submitted
-            ? correct
+            ? result === 'correct'
               ? 'bg-ok-light text-ok border border-ok/30'
+              : result === 'replace'
+                ? 'bg-warn-light text-warn border border-warn/30'
               : 'bg-danger-light text-danger border border-danger/30'
             : 'border-b-2 border-brand',
         ].join(' ')}
@@ -120,12 +142,10 @@ function CategoryBadge({ category }: { category: string }) {
   )
 }
 
-// ── Progress dots ─────────────────────────────────────────────────────────────
-type ItemResult = 'pending' | 'correct' | 'wrong'
-
 interface PracticeAttempt {
   item: PracticeItem
   userAnswer: string
+  result?: ItemResult
 }
 
 function ProgressDots({
@@ -144,6 +164,7 @@ function ProgressDots({
             'rounded-full transition-all',
             i === current ? 'w-4 h-2 bg-brand' :
             r === 'correct' ? 'w-2 h-2 bg-ok' :
+            r === 'replace' ? 'w-2 h-2 bg-warn' :
             r === 'wrong'   ? 'w-2 h-2 bg-danger' :
                               'w-2 h-2 bg-muted',
           ].join(' ')}
@@ -165,7 +186,7 @@ function ResultsScreen({
 }: {
   score: number
   total: number
-  wrongItems: { item: PracticeItem; userAnswer: string }[]
+  wrongItems: PracticeAttempt[]
   essayId: string
   mode: string
   deleting: boolean
@@ -209,14 +230,25 @@ function ResultsScreen({
       {wrongItems.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-xs font-semibold text-ghost uppercase tracking-wide">{c.reviewTitle}</h3>
-          {wrongItems.map(({ item, userAnswer }, i) => (
-            <div key={i} className="rounded-card border border-danger/30 bg-danger-light/50 p-4 space-y-2.5">
+          {wrongItems.map(({ item, userAnswer, result }, i) => (
+            <div
+              key={i}
+              className={`rounded-card border p-4 space-y-2.5 ${
+                result === 'replace'
+                  ? 'border-warn/30 bg-warn-light/50'
+                  : 'border-danger/30 bg-danger-light/50'
+              }`}
+            >
               {/* sentence */}
               <p className="text-xs text-dim leading-relaxed italic">
                 {item.category === 'dictation' ? item.sentence_original : item.sentence_display}
               </p>
               {/* diff */}
-              {item.category === 'dictation' ? (
+              {item.weak_answer && checkAnswer(userAnswer, item.weak_answer) ? (
+                <p className="text-xs text-dim">
+                  {c.replaceHint(item.weak_answer, item.answer)}
+                </p>
+              ) : item.category === 'dictation' ? (
                 <DictationDiff user={userAnswer} correct={item.answer} />
               ) : (
                 <div className="flex flex-wrap gap-4 text-xs">
@@ -229,6 +261,11 @@ function ResultsScreen({
                     <span className="text-ok font-medium font-mono">{item.answer}</span>
                   </span>
                 </div>
+              )}
+              {acceptableAnswers(item).length > 1 && (
+                <p className="text-[11px] text-ghost">
+                  {c.acceptableAnswers}：{acceptableAnswers(item).join(' / ')}
+                </p>
               )}
               {item.explanation_zh && (
                 <p className="text-xs text-dim border-t border-danger/20 pt-2 leading-relaxed">
@@ -334,25 +371,40 @@ function RecordScreen({
           </div>
 
           {session.items.map((item) => {
-            const correct = item.is_correct === 1
+            const recordResult: ItemResult = item.is_correct === 1
+              ? 'correct'
+              : item.user_answer && evaluateAnswer(item.user_answer, item) === 'replace'
+                ? 'replace'
+                : 'wrong'
+            const correct = recordResult === 'correct'
             const userAnswer = item.user_answer || ''
             return (
               <div
                 key={item.item_id}
                 className={`rounded-card border p-4 space-y-2.5 ${
-                  correct ? 'border-ok/20 bg-ok-light/40' : 'border-danger/30 bg-danger-light/50'
+                  correct
+                    ? 'border-ok/20 bg-ok-light/40'
+                    : recordResult === 'replace'
+                      ? 'border-warn/30 bg-warn-light/50'
+                      : 'border-danger/30 bg-danger-light/50'
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <CategoryBadge category={item.category} />
-                  <span className={`text-xs font-semibold ${correct ? 'text-ok' : 'text-danger'}`}>
-                    {correct ? c.correct : c.wrong}
+                  <span className={`text-xs font-semibold ${
+                    correct ? 'text-ok' : recordResult === 'replace' ? 'text-warn' : 'text-danger'
+                  }`}>
+                    {correct ? c.correct : recordResult === 'replace' ? c.replaceNeeded : c.wrong}
                   </span>
                 </div>
                 <p className="text-xs text-dim leading-relaxed italic">
                   {item.category === 'dictation' ? item.sentence_original : item.sentence_display}
                 </p>
-                {item.category === 'dictation' && !correct ? (
+                {recordResult === 'replace' ? (
+                  <p className="text-xs text-dim">
+                    {c.replaceHint(item.weak_answer, item.answer)}
+                  </p>
+                ) : item.category === 'dictation' && !correct ? (
                   <DictationDiff user={userAnswer} correct={item.answer} />
                 ) : (
                   <div className="flex flex-wrap gap-4 text-xs">
@@ -369,6 +421,11 @@ function RecordScreen({
                       </span>
                     )}
                   </div>
+                )}
+                {acceptableAnswers(item).length > 1 && (
+                  <p className="text-[11px] text-ghost">
+                    {c.acceptableAnswers}：{acceptableAnswers(item).join(' / ')}
+                  </p>
                 )}
                 {item.explanation_zh && (
                   <p className="text-xs text-dim border-t border-line/70 pt-2 leading-relaxed">
@@ -405,7 +462,7 @@ export default function PracticePage() {
   const [inputValue, setInputValue] = useState('')
   const [showHint, setShowHint] = useState(false)
   const [submitted, setSubmitted] = useState(false)
-  const [currentCorrect, setCurrentCorrect] = useState(false)
+  const [currentResult, setCurrentResult] = useState<ItemResult>('pending')
   const [results, setResults] = useState<ItemResult[]>([])
   const [userAnswers, setUserAnswers] = useState<string[]>([])
   const [wrongItems, setWrongItems] = useState<PracticeAttempt[]>([])
@@ -472,20 +529,20 @@ export default function PracticePage() {
     if (!session) return
     const items = retryItems ?? session.items
     const item = items[currentIdx]
-    const correct = checkAnswer(inputValue, item.answer)
-    setCurrentCorrect(correct)
+    const result = evaluateAnswer(inputValue, item)
+    setCurrentResult(result)
     setSubmitted(true)
 
     const newResults = [...results]
-    newResults[currentIdx] = correct ? 'correct' : 'wrong'
+    newResults[currentIdx] = result
     setResults(newResults)
 
     const newAnswers = [...userAnswers]
     newAnswers[currentIdx] = inputValue
     setUserAnswers(newAnswers)
 
-    if (!correct) {
-      setWrongItems((prev) => [...prev, { item, userAnswer: inputValue }])
+    if (result !== 'correct') {
+      setWrongItems((prev) => [...prev, { item, userAnswer: inputValue, result }])
     }
   }
 
@@ -521,10 +578,11 @@ export default function PracticePage() {
       setShowResults(true)
     } else {
       setCurrentIdx(nextIdx)
-      setInputValue('')
-      setShowHint(false)
-      setSubmitted(false)
-    }
+    setInputValue('')
+    setShowHint(false)
+    setSubmitted(false)
+    setCurrentResult('pending')
+  }
   }
 
   const startWrongRetry = (items: PracticeItem[]) => {
@@ -534,7 +592,7 @@ export default function PracticePage() {
     setInputValue('')
     setShowHint(false)
     setSubmitted(false)
-    setCurrentCorrect(false)
+    setCurrentResult('pending')
     setResults(new Array(items.length).fill('pending'))
     setUserAnswers(new Array(items.length).fill(''))
     setWrongItems([])
@@ -704,7 +762,7 @@ export default function PracticePage() {
               display={item.sentence_display}
               submitted={submitted}
               userAnswer={inputValue}
-              correct={currentCorrect}
+              result={currentResult}
             />
           )}
         </div>
@@ -762,22 +820,43 @@ export default function PracticePage() {
             {/* Correct/Wrong banner */}
             <div
               className={`flex items-start gap-3 p-4 rounded-card ${
-                currentCorrect ? 'bg-ok-light border border-ok/20' : 'bg-danger-light border border-danger/20'
+                currentResult === 'correct'
+                  ? 'bg-ok-light border border-ok/20'
+                  : currentResult === 'replace'
+                    ? 'bg-warn-light border border-warn/20'
+                    : 'bg-danger-light border border-danger/20'
               }`}
             >
-              <span className="text-xl shrink-0">{currentCorrect ? '✓' : '✗'}</span>
+              <span className="text-xl shrink-0">
+                {currentResult === 'correct' ? '✓' : currentResult === 'replace' ? '↔' : '✗'}
+              </span>
               <div className="min-w-0">
-                <p className={`text-sm font-semibold ${currentCorrect ? 'text-ok' : 'text-danger'}`}>
-                  {currentCorrect ? c.correct : c.wrong}
+                <p className={`text-sm font-semibold ${
+                  currentResult === 'correct'
+                    ? 'text-ok'
+                    : currentResult === 'replace'
+                      ? 'text-warn'
+                      : 'text-danger'
+                }`}>
+                  {currentResult === 'correct' ? c.correct : currentResult === 'replace' ? c.replaceNeeded : c.wrong}
                 </p>
-                {!currentCorrect && (
+                {currentResult !== 'correct' && (
                   <div className="mt-1 space-y-1">
-                    {isDictation ? (
+                    {currentResult === 'replace' ? (
+                      <p className="text-xs text-dim">
+                        {c.replaceHint(item.weak_answer, item.answer)}
+                      </p>
+                    ) : isDictation ? (
                       <DictationDiff user={inputValue} correct={item.answer} />
                     ) : (
                       <p className="text-xs text-dim">
                         {c.correctAnswer}：
                         <span className="font-mono font-medium text-ok ml-1">{item.answer}</span>
+                      </p>
+                    )}
+                    {acceptableAnswers(item).length > 1 && (
+                      <p className="text-[11px] text-ghost">
+                        {c.acceptableAnswers}：{acceptableAnswers(item).join(' / ')}
                       </p>
                     )}
                   </div>

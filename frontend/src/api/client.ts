@@ -336,6 +336,8 @@ export interface PracticeItem {
   sentence_original: string
   sentence_display: string
   answer: string
+  acceptable_answers_json: string
+  weak_answer: string
   hint_zh: string
   explanation_zh: string
   user_answer: string
