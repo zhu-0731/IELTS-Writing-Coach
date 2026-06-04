@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   createResource,
+  retryDiagnosis,
   runDiagnosis,
   type DiagnosisFix,
   type DiagnosisResult,
@@ -151,30 +152,73 @@ export default function DiagnosisReviewPage() {
   const payload = useMemo(() => getPayload(location.state), [location.state])
   const [result, setResult] = useState<DiagnosisResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [error, setError] = useState('')
   const [activeCategory, setActiveCategory] = useState<FixCategory>('all')
   const [selectedFixIndex, setSelectedFixIndex] = useState(0)
   const [resources, setResources] = useState<ResourceDraft[]>([])
 
-  useEffect(() => {
+  const applyDiagnosisResult = (data: DiagnosisResult) => {
+    setResult(data)
+    setResources(makeResourceDrafts(data))
+    const failedCount = data.failed_tasks?.length ?? 0
+    setError(failedCount > 0 ? `有 ${failedCount} 个诊断任务失败，可点击重试只重跑失败部分。` : '')
+  }
+
+  const runFullDiagnosis = async () => {
     if (!payload?.content?.trim()) return
     setLoading(true)
     setError('')
-    runDiagnosis({
-      essay_id: payload.essayId,
-      task_type: payload.taskType,
-      question_type: payload.questionType,
-      prompt: payload.prompt,
-      content: payload.content,
-      image_base64: payload.promptImage || undefined,
-    })
-      .then((data) => {
-        setResult(data)
-        setResources(makeResourceDrafts(data))
+    try {
+      const data = await runDiagnosis({
+        essay_id: payload.essayId,
+        task_type: payload.taskType,
+        question_type: payload.questionType,
+        prompt: payload.prompt,
+        content: payload.content,
+        image_base64: payload.promptImage || undefined,
       })
-      .catch((err) => setError(err instanceof Error ? err.message : '诊断失败'))
-      .finally(() => setLoading(false))
+      applyDiagnosisResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '诊断失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    runFullDiagnosis()
   }, [payload])
+
+  const retryFailedTasks = async () => {
+    if (!payload?.content?.trim()) return
+    const failedKeys = result?.failed_tasks?.map((task) => task.key).filter(Boolean) ?? []
+    if (!result || failedKeys.length === 0) {
+      await runFullDiagnosis()
+      return
+    }
+
+    setRetrying(true)
+    setError('')
+    try {
+      const data = await retryDiagnosis({
+        diagnosis_id: result.diagnosis_id,
+        essay_id: payload.essayId,
+        task_type: payload.taskType,
+        question_type: payload.questionType,
+        prompt: payload.prompt,
+        content: payload.content,
+        image_base64: payload.promptImage || undefined,
+        failed_task_keys: failedKeys,
+        previous_result: result,
+      })
+      applyDiagnosisResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重试失败')
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   const paragraphs = useMemo(() => splitEssay(payload?.content || ''), [payload?.content])
   const fixes = result?.top_sentence_fixes || []
@@ -182,6 +226,8 @@ export default function DiagnosisReviewPage() {
     .map((fix, index) => ({ fix, index, category: inferCategory(fix) }))
     .filter((item) => activeCategory === 'all' || item.category === activeCategory)
   const selectedFix = fixes[selectedFixIndex]
+  const failedTasks = result?.failed_tasks ?? []
+  const showRetryButton = Boolean(error || failedTasks.length > 0)
 
   const updateResource = (localId: string, patch: Partial<ResourceDraft>) => {
     setResources((prev) => prev.map((item) => (
@@ -235,13 +281,30 @@ export default function DiagnosisReviewPage() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           {result?.estimated_band && <Badge variant="blue">预估 {result.estimated_band}</Badge>}
-          {loading && <span className="text-xs text-ghost">正在诊断...</span>}
+          {loading && <span className="text-xs text-ghost">正在分任务诊断...</span>}
         </div>
       </div>
 
-      {error && (
-        <div className="shrink-0 px-4 py-3 rounded-card bg-danger-light text-danger text-sm">
-          {error}
+      {showRetryButton && (
+        <div className="shrink-0 px-4 py-3 rounded-card bg-danger-light text-danger text-sm flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p>{error || '部分诊断任务失败。'}</p>
+            {failedTasks.length > 0 && (
+              <p className="mt-1 text-xs text-danger/80">
+                {failedTasks.map((task) => task.label || task.key).join('、')}
+              </p>
+            )}
+          </div>
+          <Button
+            variant="danger"
+            size="sm"
+            loading={retrying}
+            disabled={loading || retrying}
+            onClick={retryFailedTasks}
+            className="shrink-0 bg-surface"
+          >
+            重试
+          </Button>
         </div>
       )}
 
@@ -315,7 +378,7 @@ export default function DiagnosisReviewPage() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {loading ? (
-              <div className="h-full flex items-center justify-center text-sm text-ghost">正在生成逐句修改...</div>
+              <div className="h-full flex items-center justify-center text-sm text-ghost">正在生成逐段修改...</div>
             ) : visibleFixes.length === 0 ? (
               <div className="py-16 text-center text-sm text-ghost">当前分类没有修改点</div>
             ) : (

@@ -1,93 +1,174 @@
+import re
+from copy import deepcopy
+from typing import Any
+
 from services.provider import LLMProvider
 
 
-def run_diagnosis(
+TASK_REVIEW = "review"
+
+
+def _task_label(task_type: str) -> str:
+    if task_type == "task1":
+        return "Task 1 小作文（图表 / 流程 / 地图描述）"
+    return "Task 2 大作文（议论文）"
+
+
+def _min_words(task_type: str) -> int:
+    return 150 if task_type == "task1" else 250
+
+
+def split_paragraphs(content: str) -> list[str]:
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", content or "") if p.strip()]
+    if paragraphs:
+        return paragraphs
+    stripped = (content or "").strip()
+    return [stripped] if stripped else []
+
+
+def split_sentences(paragraph: str) -> list[str]:
+    sentences = re.findall(r"[^.!?。！？]+[.!?。！？]?", paragraph.replace("\n", " "))
+    cleaned = [s.strip() for s in sentences if s.strip()]
+    return cleaned or [paragraph.strip()]
+
+
+def _empty_result() -> dict:
+    return {
+        "estimated_band": "N/A",
+        "main_problems": [],
+        "top_sentence_fixes": [],
+        "phrase_resources": [],
+        "template_misuse": "",
+        "next_training_task": "",
+        "diagnosis_status": "complete",
+        "failed_tasks": [],
+    }
+
+
+def _system_prompt() -> str:
+    return (
+        "You are an expert IELTS examiner and writing coach. "
+        "Return valid JSON only. Write Chinese for explanations, but keep original "
+        "student text and suggested replacement text in English. Be concise."
+    )
+
+
+def _short_error(exc: Exception) -> str:
+    return str(exc)[:500] or exc.__class__.__name__
+
+
+def _normalize_problem(problem: dict) -> dict:
+    return {
+        "category": str(problem.get("category") or "Coherence").strip(),
+        "issue": str(problem.get("issue") or "").strip(),
+        "severity": str(problem.get("severity") or "medium").strip(),
+    }
+
+
+def _normalize_fix(fix: dict, paragraph_index: int) -> dict:
+    category = str(fix.get("category") or "expression").strip()
+    if category not in ("spelling", "grammar", "expression", "logic"):
+        category = "expression"
+
+    scope = str(fix.get("scope") or "sentence").strip()
+    if scope not in ("word", "sentence", "paragraph"):
+        scope = "sentence"
+
+    sentence_index = fix.get("sentence_index", 0)
+    try:
+        sentence_index = int(sentence_index)
+    except (TypeError, ValueError):
+        sentence_index = -1 if scope == "paragraph" else 0
+
+    resource_type = str(fix.get("resource_type") or "expression").strip()
+    if resource_type not in ("pattern", "collocation", "expression"):
+        resource_type = "expression"
+
+    items = fix.get("resource_items") or []
+    if isinstance(items, str):
+        items = [items]
+    if not isinstance(items, list):
+        items = []
+
+    return {
+        "scope": scope,
+        "category": category,
+        "paragraph_index": paragraph_index,
+        "sentence_index": sentence_index,
+        "original": str(fix.get("original") or "").strip(),
+        "problem": str(fix.get("problem") or "").strip(),
+        "suggestion": str(fix.get("suggestion") or "").strip(),
+        "resource_type": resource_type,
+        "resource_name": str(fix.get("resource_name") or "诊断推荐表达").strip(),
+        "resource_goal": str(fix.get("resource_goal") or fix.get("problem") or "").strip(),
+        "resource_pattern": str(fix.get("resource_pattern") or fix.get("suggestion") or "").strip(),
+        "resource_items": [str(item).strip() for item in items if str(item).strip()],
+    }
+
+
+def _normalize_phrase(resource: dict) -> dict:
+    resource_type = str(resource.get("type") or "collocation").strip()
+    if resource_type not in ("collocation", "expression"):
+        resource_type = "expression"
+    return {
+        "pattern": str(resource.get("pattern") or "").strip(),
+        "name": str(resource.get("name") or "短语积累").strip(),
+        "goal": str(resource.get("goal") or "").strip(),
+        "type": resource_type,
+    }
+
+
+def _dedupe_resources(resources: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for resource in resources:
+        pattern = str(resource.get("pattern") or "").strip()
+        key = pattern.lower()
+        if not pattern or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(resource)
+    return deduped
+
+
+def _run_review_task(
     provider: LLMProvider,
+    *,
     essay_content: str,
     prompt: str,
     task_type: str,
     question_type: str,
-    image_base64: str | None = None,
+    image_base64: str | None,
 ) -> dict:
-    task_label = (
-        "Task 1 小作文（图表 / 流程 / 地图描述）"
-        if task_type == "task1"
-        else "Task 2 大作文（议论文）"
-    )
-    min_words = 150 if task_type == "task1" else 250
+    user = f"""请只完成“审题与总体诊断”，输出要短，避免长篇改写。
 
-    system = (
-        "You are an expert IELTS examiner and writing coach. "
-        "Analyze the student's essay and return structured feedback as valid JSON only. "
-        "Write ALL text in Simplified Chinese, EXCEPT: "
-        "'estimated_band' (format: '6.0' / '6.5' / '7.0+'), "
-        "'original' fields (keep exactly as student wrote), "
-        "'suggestion' fields (complete English replacement text), and "
-        "resource pattern/items fields that are English learning material. "
-        "Be concise and direct."
-    )
-
-    user = f"""请诊断以下雅思作文，并按文章结构逐句、逐段给出修改建议。
-
-题型：{task_label}
+题型：{_task_label(task_type)}
 问题类型：{question_type or "通用"}
+最低字数：{_min_words(task_type)} 词
 题目：{prompt or "（未提供）"}
 
-作文内容：
+作文全文：
 {essay_content}
 
-最低字数：{min_words} 词
-
-返回如下 JSON（严格遵守字段名和 JSON 格式）：
+返回 JSON：
 {{
-  "estimated_band": "预估分数段，如 6.0 / 6.5 / 7.0+",
+  "estimated_band": "如 6.0 / 6.5 / 7.0+ / N/A",
   "main_problems": [
     {{
       "category": "Task Achievement / Coherence / Vocabulary / Grammar 之一",
-      "issue": "具体问题（中文，1-2句话）",
+      "issue": "中文，1句话",
       "severity": "high 或 medium"
     }}
   ],
-  "top_sentence_fixes": [
-    {{
-      "scope": "word / sentence / paragraph 之一",
-      "category": "spelling / grammar / expression / logic 之一",
-      "paragraph_index": 0,
-      "sentence_index": 0,
-      "original": "原文中的对应单词、句子或段落片段（原样保留英文）",
-      "problem": "为什么要改（中文，1句话；逻辑类要说明是否跳脱、支撑不足或衔接不清）",
-      "suggestion": "修改后的对应英文内容；scope为sentence时给完整句子，scope为paragraph时给可替换段落片段",
-      "resource_type": "pattern / collocation / expression 之一",
-      "resource_name": "推荐积累名称（中文，15字内）",
-      "resource_goal": "掌握后能解决什么问题（中文，20字内）",
-      "resource_pattern": "可积累的抽象句型、搭配或表达；不要直接存整篇改写",
-      "resource_items": ["基于当前题目的1-2个英文例句"]
-    }}
-  ],
-  "phrase_resources": [
-    {{
-      "pattern": "推荐积累的英文短语或功能表达（2-12词）",
-      "name": "中文名称（10字内）",
-      "goal": "用途说明（中文，15字内）",
-      "type": "collocation 或 expression"
-    }}
-  ],
-  "template_misuse": "如果发现机械套模板，请中文说明；否则返回空字符串",
-  "next_training_task": "下次练习的具体建议（中文，2句以内，可操作）"
+  "template_misuse": "中文，若无则空字符串",
+  "next_training_task": "中文，2句以内"
 }}
 
 要求：
-- main_problems 最多 3 条，优先指出对分数影响最大的。
-- top_sentence_fixes 不再只挑 3 句；请覆盖全文，返回 8-14 条。短文可以少于 8 条，但要尽量覆盖所有关键句和至少 1 个段落级逻辑问题。
-- category 必须覆盖 spelling、grammar、expression、logic 中实际存在的问题；没有拼写问题时可以不返回 spelling。
-- paragraph_index 和 sentence_index 从 0 开始；段落级建议 sentence_index 填 -1。
-- original 必须能在作文原文中找到或是原文的连续片段，方便前端连线定位。
-- suggestion 必须是学生可直接替换到作文中的英文内容。
-- phrase_resources 提取 4-8 条系统推荐积累，必须是英文短语或功能表达，不是整句。
-- 积累只作为系统推荐返回，不要声称已经自动保存。
-- 如果作文内容为空或不足 30 词，estimated_band 返回 "N/A" 并说明原因。
+- 不要逐句改写。
+- main_problems 最多 3 条。
+- 重点判断是否审题准确、立场是否回应题目、是否有模板套用。
 """
-
     if image_base64:
         b64 = image_base64.split(",", 1)[-1]
         user_content: str | list = [
@@ -99,16 +180,202 @@ def run_diagnosis(
 
     result = provider.chat_json(
         messages=[
-            {"role": "system", "content": system},
+            {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": user_content},
         ],
         schema={},
-        temperature=0.35,
-        max_tokens=4200,
+        temperature=0.25,
+        max_tokens=900,
     )
+    return {
+        "estimated_band": str(result.get("estimated_band") or "N/A").strip(),
+        "main_problems": [_normalize_problem(p) for p in result.get("main_problems", [])][:3],
+        "template_misuse": str(result.get("template_misuse") or "").strip(),
+        "next_training_task": str(result.get("next_training_task") or "").strip(),
+    }
 
-    for key in ("estimated_band", "main_problems", "top_sentence_fixes", "next_training_task"):
-        if key not in result:
-            raise ValueError(f"LLM 返回缺少字段 '{key}'，请重试")
+
+def _run_paragraph_task(
+    provider: LLMProvider,
+    *,
+    paragraph: str,
+    paragraph_index: int,
+    sentences: list[str],
+    prompt: str,
+    task_type: str,
+    question_type: str,
+) -> dict:
+    indexed_sentences = "\n".join(
+        f"S{idx}: {sentence}" for idx, sentence in enumerate(sentences)
+    )
+    user = f"""请只诊断下面这一段，不要输出全文诊断。重点检查逻辑、语法、拼写和表达。
+
+题型：{_task_label(task_type)}
+问题类型：{question_type or "通用"}
+题目：{prompt or "（未提供）"}
+段落编号：P{paragraph_index}
+
+段落原文：
+{paragraph}
+
+句子索引：
+{indexed_sentences}
+
+返回 JSON：
+{{
+  "fixes": [
+    {{
+      "scope": "word / sentence / paragraph 之一",
+      "category": "spelling / grammar / expression / logic 之一",
+      "sentence_index": 0,
+      "original": "原文中的对应单词、句子或段落片段，必须原样摘取",
+      "problem": "中文，说明为什么改；逻辑类说明跳脱、支撑不足或衔接问题",
+      "suggestion": "修改后的英文内容，可直接替换对应片段",
+      "resource_type": "pattern / collocation / expression 之一",
+      "resource_name": "中文，15字内",
+      "resource_goal": "中文，20字内",
+      "resource_pattern": "可积累的英文句型、搭配或表达",
+      "resource_items": ["英文例句，最多2条"]
+    }}
+  ],
+  "phrase_resources": [
+    {{
+      "pattern": "英文短语或功能表达，2-12词",
+      "name": "中文名称，10字内",
+      "goal": "中文用途，15字内",
+      "type": "collocation 或 expression"
+    }}
+  ]
+}}
+
+要求：
+- fixes 返回 1-4 条，优先真实影响分数的问题；没有问题可返回空数组。
+- 段落级逻辑问题 scope 用 paragraph，sentence_index 用 -1。
+- 拼写错误用 category=spelling；语法错误用 grammar；表达替换用 expression；论证/衔接/支撑问题用 logic。
+- suggestion 不要超过原问题所需范围，避免改写整篇。
+- phrase_resources 返回 0-2 条。
+"""
+    result = provider.chat_json(
+        messages=[
+            {"role": "system", "content": _system_prompt()},
+            {"role": "user", "content": user},
+        ],
+        schema={},
+        temperature=0.3,
+        max_tokens=1400,
+    )
+    return {
+        "fixes": [
+            _normalize_fix(fix, paragraph_index)
+            for fix in result.get("fixes", [])
+            if str(fix.get("original") or "").strip() and str(fix.get("suggestion") or "").strip()
+        ][:4],
+        "phrase_resources": [
+            _normalize_phrase(resource)
+            for resource in result.get("phrase_resources", [])
+            if str(resource.get("pattern") or "").strip()
+        ][:2],
+    }
+
+
+def _all_task_keys(paragraph_count: int) -> list[str]:
+    return [TASK_REVIEW] + [f"paragraph:{idx}" for idx in range(paragraph_count)]
+
+
+def _failed_task(key: str, label: str, exc: Exception) -> dict:
+    return {"key": key, "label": label, "error": _short_error(exc)}
+
+
+def _merge_failed_tasks(previous: list[dict], retried_keys: set[str], current: list[dict]) -> list[dict]:
+    retained = [task for task in previous if task.get("key") not in retried_keys]
+    by_key = {task.get("key"): task for task in retained if task.get("key")}
+    for task in current:
+        if task.get("key"):
+            by_key[task["key"]] = task
+    return list(by_key.values())
+
+
+def run_diagnosis(
+    provider: LLMProvider,
+    essay_content: str,
+    prompt: str,
+    task_type: str,
+    question_type: str,
+    image_base64: str | None = None,
+    *,
+    retry_task_keys: list[str] | None = None,
+    previous_result: dict[str, Any] | None = None,
+) -> dict:
+    paragraphs = split_paragraphs(essay_content)
+    all_keys = _all_task_keys(len(paragraphs))
+    requested_keys = set(retry_task_keys or all_keys)
+    requested_keys = {key for key in requested_keys if key in all_keys}
+    if not requested_keys:
+        requested_keys = set(all_keys)
+
+    result = deepcopy(previous_result) if previous_result else _empty_result()
+    result.setdefault("main_problems", [])
+    result.setdefault("top_sentence_fixes", [])
+    result.setdefault("phrase_resources", [])
+    result.setdefault("template_misuse", "")
+    result.setdefault("next_training_task", "")
+    result.setdefault("estimated_band", "N/A")
+
+    previous_failed = result.get("failed_tasks") or []
+    current_failed: list[dict] = []
+
+    if TASK_REVIEW in requested_keys:
+        try:
+            review = _run_review_task(
+                provider,
+                essay_content=essay_content,
+                prompt=prompt,
+                task_type=task_type,
+                question_type=question_type,
+                image_base64=image_base64,
+            )
+            result.update(review)
+        except Exception as exc:
+            current_failed.append(_failed_task(TASK_REVIEW, "审题与总体诊断", exc))
+
+    existing_fixes = result.get("top_sentence_fixes") or []
+    existing_resources = result.get("phrase_resources") or []
+    retried_paragraphs = {
+        int(key.split(":", 1)[1])
+        for key in requested_keys
+        if key.startswith("paragraph:") and key.split(":", 1)[1].isdigit()
+    }
+    if retried_paragraphs:
+        existing_fixes = [
+            fix for fix in existing_fixes
+            if fix.get("paragraph_index") not in retried_paragraphs
+        ]
+
+    for paragraph_index, paragraph in enumerate(paragraphs):
+        key = f"paragraph:{paragraph_index}"
+        if key not in requested_keys:
+            continue
+        try:
+            paragraph_result = _run_paragraph_task(
+                provider,
+                paragraph=paragraph,
+                paragraph_index=paragraph_index,
+                sentences=split_sentences(paragraph),
+                prompt=prompt,
+                task_type=task_type,
+                question_type=question_type,
+            )
+            existing_fixes.extend(paragraph_result["fixes"])
+            existing_resources.extend(paragraph_result["phrase_resources"])
+        except Exception as exc:
+            current_failed.append(_failed_task(key, f"第 {paragraph_index + 1} 段诊断", exc))
+
+    result["top_sentence_fixes"] = existing_fixes
+    result["phrase_resources"] = _dedupe_resources(existing_resources)
+    result["failed_tasks"] = _merge_failed_tasks(previous_failed, requested_keys, current_failed)
+    result["diagnosis_status"] = "complete" if not result["failed_tasks"] else "partial_failed"
+
+    if not result["next_training_task"] and result["failed_tasks"]:
+        result["next_training_task"] = "部分诊断任务失败，请先点击重试，再根据成功返回的修改点练习。"
 
     return result

@@ -241,6 +241,12 @@ export interface DiagnosisPhraseResource {
   type: string
 }
 
+export interface DiagnosisFailedTask {
+  key: string
+  label: string
+  error: string
+}
+
 export interface DiagnosisResult {
   diagnosis_id: string
   estimated_band: string
@@ -250,6 +256,8 @@ export interface DiagnosisResult {
   template_misuse: string
   next_training_task: string
   saved_resource_count: number
+  diagnosis_status?: 'complete' | 'partial_failed'
+  failed_tasks?: DiagnosisFailedTask[]
 }
 
 export const runDiagnosis = (data: {
@@ -260,6 +268,18 @@ export const runDiagnosis = (data: {
   content: string
   image_base64?: string
 }) => request<DiagnosisResult>('/diagnosis/full', { method: 'POST', body: JSON.stringify(data) })
+
+export const retryDiagnosis = (data: {
+  diagnosis_id?: string | null
+  essay_id?: string | null
+  task_type: string
+  question_type: string
+  prompt: string
+  content: string
+  image_base64?: string
+  failed_task_keys: string[]
+  previous_result: DiagnosisResult
+}) => request<DiagnosisResult>('/diagnosis/retry', { method: 'POST', body: JSON.stringify(data) })
 
 // Home summary
 export interface HomeResource {
