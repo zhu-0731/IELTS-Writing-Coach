@@ -309,6 +309,28 @@ export const copy = {
     save: '保存设置',
     saving: '保存中…',
     saved: '已保存',
+    advanced: {
+      title: '高级设置 · 按功能独立配置',
+      subtitle: '为「全文诊断」「练习题生成」单独指定模型。关闭时，该功能使用上方通用配置。',
+      toggle: '展开高级设置',
+      collapse: '收起',
+      enable: '为此功能启用独立配置',
+      featureLabel: {
+        diagnosis: '全文诊断',
+        practice: '练习题生成',
+      },
+      featureHint: {
+        diagnosis: '逐句分析作文、提炼语言资源时使用的模型。',
+        practice: '从诊断结果生成填空/默写练习题时使用的模型。',
+      },
+      fieldBlankHint: '留空则沿用上方通用配置的对应项',
+      apiKeyHint: '留空则沿用通用配置的 Key；Key 仅存于本地 SQLite。',
+      effectivePrefix: '当前实际生效：',
+      effectiveGeneral: '通用配置',
+      effectiveFeature: '独立配置',
+      effectiveModel: (m: string) => `模型 ${m || '（未设置）'}`,
+      effectiveBase: (b: string) => `· ${b || '（未设置 Base URL）'}`,
+    },
     danger: {
       title: '危险操作',
       desc: '清空所有学习数据（问卷、作文、诊断记录）。API 配置保留。',

@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from database import get_conn
 from services.practice_service import generate_practice, complete_session, check_answer
-from services.provider import make_provider_from_db
+from services.provider import make_provider_for_feature
 import json
 
 router = APIRouter(prefix="/api/practice", tags=["practice"])
@@ -35,10 +35,10 @@ def generate(body: GenerateRequest):
         raise HTTPException(400, "mode 必须是 cloze 或 dictation")
     conn = get_conn()
     try:
-        cfg = conn.execute("SELECT * FROM settings LIMIT 1").fetchone()
-        if not cfg or not cfg["api_key"]:
-            raise HTTPException(400, "请先在设置页配置 API Key")
-        provider = make_provider_from_db(cfg)
+        try:
+            provider = make_provider_for_feature(conn, "practice")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
         try:
             result = generate_practice(provider, conn, body.essay_id, body.mode)
         except ValueError as e:
@@ -162,10 +162,10 @@ def appeal(body: AppealRequest):
         if not item:
             raise HTTPException(404, "Practice item not found")
 
-        cfg = conn.execute("SELECT * FROM settings LIMIT 1").fetchone()
-        if not cfg or not cfg["api_key"]:
-            raise HTTPException(400, "请先在设置页配置 API Key")
-        provider = make_provider_from_db(cfg)
+        try:
+            provider = make_provider_for_feature(conn, "practice")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
         acceptable = json.loads(item["acceptable_answers_json"] or "[]")
         system = (

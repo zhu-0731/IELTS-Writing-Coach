@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react'
-import { getSettings, saveSettings, resetAllData, type SettingsData, type SettingsWrite } from '../api/client'
+import {
+  getSettings,
+  saveSettings,
+  resetAllData,
+  getFeatureSettings,
+  saveFeatureSettings,
+  type SettingsData,
+  type SettingsWrite,
+  type FeatureSettings,
+  type FeatureSettingsWrite,
+  type FeatureKey,
+} from '../api/client'
 import { copy } from '../i18n'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -87,12 +98,147 @@ function FieldRow({ label, children, hint }: { label: string; children: React.Re
 
 const inputCls = 'w-full px-3 py-2 border border-line rounded-input text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors'
 
+const a = copy.settings.advanced
+
+function FeatureConfigCard({
+  feature,
+  initial,
+}: {
+  feature: FeatureKey
+  initial: FeatureSettings
+}) {
+  const [eff, setEff] = useState<FeatureSettings>(initial)
+  const [form, setForm] = useState({
+    enabled: initial.enabled,
+    base_url: initial.base_url,
+    model_name: initial.model_name,
+    api_key: '',
+    temperature: initial.temperature,
+    max_tokens: initial.max_tokens,
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    try {
+      const payload: FeatureSettingsWrite = {
+        enabled: form.enabled,
+        base_url: form.base_url,
+        model_name: form.model_name,
+        temperature: form.temperature,
+        max_tokens: form.max_tokens,
+      }
+      if (form.api_key.trim()) payload.api_key = form.api_key.trim()
+      const updated = await saveFeatureSettings(feature, payload)
+      setEff(updated)
+      setForm((f) => ({ ...f, api_key: '' }))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-card border border-line p-4">
+      {/* Enable toggle */}
+      <label className="flex items-start justify-between gap-3 cursor-pointer">
+        <div>
+          <span className="text-sm font-medium text-ink">{a.featureLabel[feature]}</span>
+          <p className="text-xs text-ghost mt-0.5">{a.featureHint[feature]}</p>
+        </div>
+        <input
+          type="checkbox"
+          className="mt-1 accent-brand shrink-0"
+          checked={form.enabled}
+          onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
+        />
+      </label>
+
+      {/* Override fields */}
+      {form.enabled && (
+        <div className="mt-4 space-y-3">
+          <FieldRow label={c.api.baseUrl} hint={a.fieldBlankHint}>
+            <input
+              className={inputCls}
+              value={form.base_url}
+              onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
+              placeholder={c.api.baseUrlPlaceholder}
+            />
+          </FieldRow>
+          <FieldRow label={c.api.modelName} hint={a.fieldBlankHint}>
+            <input
+              className={inputCls}
+              value={form.model_name}
+              onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
+              placeholder={c.api.modelPlaceholder}
+            />
+          </FieldRow>
+          <FieldRow label={c.api.apiKey} hint={a.apiKeyHint}>
+            <input
+              className={inputCls}
+              type="password"
+              value={form.api_key}
+              onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+              placeholder={
+                eff.api_key_masked
+                  ? c.api.apiKeySet(eff.api_key_masked.replace(/\*/g, ''))
+                  : c.api.apiKeyEmpty
+              }
+              autoComplete="off"
+            />
+          </FieldRow>
+          <div className="grid grid-cols-2 gap-4">
+            <FieldRow label={c.capabilities.temperature}>
+              <input
+                className={inputCls}
+                type="number" min="0" max="2" step="0.1"
+                value={form.temperature}
+                onChange={(e) => setForm((f) => ({ ...f, temperature: parseFloat(e.target.value) }))}
+              />
+            </FieldRow>
+            <FieldRow label={c.capabilities.maxTokens}>
+              <input
+                className={inputCls}
+                type="number" min="256" max="8192" step="128"
+                value={form.max_tokens}
+                onChange={(e) => setForm((f) => ({ ...f, max_tokens: parseInt(e.target.value) }))}
+              />
+            </FieldRow>
+          </div>
+        </div>
+      )}
+
+      {/* Effective config indicator (reflects last saved state) */}
+      <p className="mt-3 text-[11px] text-ghost leading-relaxed">
+        {a.effectivePrefix}
+        <span className={eff.effective_source === 'feature' ? 'text-brand font-medium' : 'text-dim font-medium'}>
+          {eff.effective_source === 'feature' ? a.effectiveFeature : a.effectiveGeneral}
+        </span>
+        {' · '}
+        {a.effectiveModel(eff.effective_model_name)} {a.effectiveBase(eff.effective_base_url)}
+      </p>
+
+      {/* Save */}
+      <div className="mt-3 flex items-center gap-2">
+        <Button variant="secondary" size="sm" onClick={save} loading={saving}>
+          {saving ? c.saving : c.save}
+        </Button>
+        {saved && <span className="text-xs text-ok font-medium">✓ {c.saved}</span>}
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const [status, setStatus] = useState<Status>('loading')
   const [showReset, setShowReset] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState<SettingsData | null>(null)
   const [detected, setDetected] = useState<ProviderPreset | null>(null)
+  const [features, setFeatures] = useState<Record<FeatureKey, FeatureSettings> | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const [form, setForm] = useState({
     provider: 'openai_compatible',
@@ -131,6 +277,7 @@ export default function SettingsPage() {
         setError(c.loadError)
         setStatus('error')
       })
+    getFeatureSettings().then(setFeatures).catch(() => {})
   }, [])
 
   async function handleSave(e: React.FormEvent) {
@@ -284,6 +431,30 @@ export default function SettingsPage() {
             )}
           </div>
         </form>
+      )}
+
+      {/* Advanced: per-feature LLM overrides */}
+      {features && (
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="flex items-center gap-1.5 text-sm font-medium text-dim hover:text-ink transition-colors"
+          >
+            <span className={`inline-block transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>›</span>
+            {a.title}
+          </button>
+
+          {showAdvanced && (
+            <Card padding="lg" className="mt-3">
+              <p className="text-xs text-ghost mb-4 leading-relaxed">{a.subtitle}</p>
+              <div className="space-y-4">
+                <FeatureConfigCard feature="diagnosis" initial={features.diagnosis} />
+                <FeatureConfigCard feature="practice" initial={features.practice} />
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Danger zone */}

@@ -26,6 +26,30 @@ class SettingsWrite(BaseModel):
     max_tokens: Optional[int] = None
 
 
+class FeatureSettingsRead(BaseModel):
+    feature: str
+    enabled: bool
+    model_name: str
+    base_url: str
+    api_key_masked: str
+    temperature: float
+    max_tokens: int
+    # Effective config after override/fallback resolution (masked key)
+    effective_source: str        # 'general' | 'feature'
+    effective_model_name: str
+    effective_base_url: str
+    effective_api_key_masked: str
+
+
+class FeatureSettingsWrite(BaseModel):
+    enabled: Optional[bool] = None
+    model_name: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
 class ProfileStatus(BaseModel):
     is_setup_complete: bool
 

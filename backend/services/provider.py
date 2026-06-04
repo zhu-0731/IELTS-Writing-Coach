@@ -121,3 +121,77 @@ def make_provider_from_db(row) -> OpenAICompatibleProvider:
         temperature=row["temperature"],
         max_tokens=row["max_tokens"],
     )
+
+
+# ── Per-feature configuration resolution ───────────────────────────────────────
+#
+# Each feature ('diagnosis', 'practice', ...) may have an override row in
+# feature_settings. Resolution rules:
+#   • no row, or enabled = 0  → use the general settings row verbatim
+#   • enabled = 1             → use the feature row, but for the three
+#                                connection-critical fields (base_url,
+#                                model_name, api_key) fall back to the general
+#                                value when the feature field is left blank.
+#                                temperature / max_tokens always come from the
+#                                feature row when the override is active.
+#
+# This keeps the semantics unambiguous: an enabled override genuinely takes
+# effect, and a disabled one is fully transparent.
+
+def _row_to_dict(row) -> dict:
+    return dict(row) if row else {}
+
+
+def resolve_feature_config(conn, feature: str | None) -> dict:
+    """Return the effective LLM config for a feature.
+
+    The returned dict carries the REAL api_key (for provider construction).
+    Callers that surface this to clients must mask the key themselves.
+    """
+    base = _row_to_dict(conn.execute("SELECT * FROM settings WHERE id = 1").fetchone())
+
+    fs: dict = {}
+    if feature:
+        fs = _row_to_dict(
+            conn.execute(
+                "SELECT * FROM feature_settings WHERE feature = ?", (feature,)
+            ).fetchone()
+        )
+
+    if not fs or not fs.get("enabled"):
+        return {
+            "source": "general",
+            "base_url": base.get("base_url", ""),
+            "model_name": base.get("model_name", ""),
+            "api_key": base.get("api_key", ""),
+            "temperature": base.get("temperature", 0.7),
+            "max_tokens": base.get("max_tokens", 2048),
+        }
+
+    return {
+        "source": "feature",
+        "base_url": (fs.get("base_url") or "").strip() or base.get("base_url", ""),
+        "model_name": (fs.get("model_name") or "").strip() or base.get("model_name", ""),
+        "api_key": (fs.get("api_key") or "").strip() or base.get("api_key", ""),
+        "temperature": fs.get("temperature", 0.7),
+        "max_tokens": fs.get("max_tokens", 2048),
+    }
+
+
+def make_provider_for_feature(conn, feature: str | None) -> OpenAICompatibleProvider:
+    """Build a provider for a feature, applying override/fallback resolution.
+
+    Raises ValueError (not HTTPException) so routers can translate it.
+    """
+    cfg = resolve_feature_config(conn, feature)
+    if not cfg["api_key"]:
+        raise ValueError("API Key 未配置，请前往设置页填写。")
+    if not cfg["model_name"]:
+        raise ValueError("Model Name 未配置，请前往设置页填写。")
+    return OpenAICompatibleProvider(
+        base_url=cfg["base_url"] or "https://api.openai.com/v1",
+        api_key=cfg["api_key"],
+        model_name=cfg["model_name"],
+        temperature=cfg["temperature"],
+        max_tokens=cfg["max_tokens"],
+    )
