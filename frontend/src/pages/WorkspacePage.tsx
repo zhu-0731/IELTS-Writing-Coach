@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createEssay, updateEssay } from '../api/client'
 import { copy } from '../i18n'
 import PromptPanel from '../components/workspace/PromptPanel'
 import AISidebar from '../components/workspace/AISidebar'
-import DiagnosisModal from '../components/workspace/DiagnosisModal'
 import Button from '../components/ui/Button'
 
 type TaskType = 'task1' | 'task2'
@@ -40,6 +40,7 @@ function draft<T>(key: string, t?: TaskType): T | undefined {
 }
 
 export default function WorkspacePage() {
+  const navigate = useNavigate()
   // Lazy initialisers read from sessionStorage — correct on the very first render.
   const [taskType, setTaskType] = useState<TaskType>(
     () => (sessionStorage.getItem('workspace_active_task') as TaskType | null) ?? 'task2'
@@ -49,7 +50,6 @@ export default function WorkspacePage() {
   const [content, setContent] = useState<string>(() => draft('content') ?? '')
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => draft('sidebarCollapsed') ?? false)
   const [activeTab, setActiveTab] = useState<SidebarTab>(() => draft('activeTab') ?? 'hint')
-  const [showDiagModal, setShowDiagModal] = useState(false)
 
   const [leftWidth, setLeftWidth] = useState<number>(() => draft('leftWidth') ?? 320)
   const [rightWidth, setRightWidth] = useState<number>(() => draft('rightWidth') ?? 340)
@@ -223,6 +223,21 @@ export default function WorkspacePage() {
     })
   }, [content])
 
+  const openDiagnosisReview = () => {
+    const payload = {
+      essayId,
+      taskType,
+      questionType,
+      prompt,
+      promptImage,
+      content,
+    }
+    try {
+      sessionStorage.setItem('diagnosis_review_payload', JSON.stringify(payload))
+    } catch { /* skip persistence if storage is unavailable */ }
+    navigate('/diagnosis/review', { state: payload })
+  }
+
   const saveLabel = (() => {
     if (saveStatus === 'saving') return c.saveStatus.saving
     if (saveStatus === 'saved')  return c.saveStatus.saved
@@ -273,7 +288,7 @@ export default function WorkspacePage() {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => setShowDiagModal(true)}
+            onClick={openDiagnosisReview}
             disabled={wordCount < 10}
           >
             {c.diagnose}
@@ -383,19 +398,6 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      {/* ── Diagnosis modal ───────────────────────────────────────── */}
-      {showDiagModal && (
-        <DiagnosisModal
-          essayId={essayId}
-          taskType={taskType}
-          questionType={questionType}
-          prompt={prompt}
-          promptImage={promptImage}
-          content={content}
-          wordCount={wordCount}
-          onClose={() => setShowDiagModal(false)}
-        />
-      )}
     </div>
   )
 }

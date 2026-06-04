@@ -11,6 +11,7 @@ import TemplatesPage from './pages/TemplatesPage'
 import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
 import PracticePage from './pages/PracticePage'
+import DiagnosisReviewPage from './pages/DiagnosisReviewPage'
 
 type InitState = 'loading' | 'setup_needed' | 'ready' | 'backend_down'
 
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="/history"   element={<MainLayout><HistoryPage /></MainLayout>} />
             <Route path="/settings"  element={<MainLayout><SettingsPage /></MainLayout>} />
             <Route path="/practice/:sessionId" element={<MainLayout><PracticePage /></MainLayout>} />
+            <Route path="/diagnosis/review" element={<MainLayout><DiagnosisReviewPage /></MainLayout>} />
             <Route path="*"          element={<Navigate to="/" replace />} />
           </>
         )}

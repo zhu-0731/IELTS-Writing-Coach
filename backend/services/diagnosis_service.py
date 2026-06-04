@@ -21,66 +21,74 @@ def run_diagnosis(
         "Analyze the student's essay and return structured feedback as valid JSON only. "
         "Write ALL text in Simplified Chinese, EXCEPT: "
         "'estimated_band' (format: '6.0' / '6.5' / '7.0+'), "
-        "'original' fields (keep exactly as student wrote), and "
-        "'suggestion' fields (must be complete English sentences ready to replace the original). "
-        "Be concise and direct — no lengthy explanations."
+        "'original' fields (keep exactly as student wrote), "
+        "'suggestion' fields (complete English replacement text), and "
+        "resource pattern/items fields that are English learning material. "
+        "Be concise and direct."
     )
 
-    user = f"""请诊断以下雅思作文：
+    user = f"""请诊断以下雅思作文，并按文章结构逐句、逐段给出修改建议。
 
 题型：{task_label}
 问题类型：{question_type or "通用"}
-题目：
-{prompt or "（未提供）"}
+题目：{prompt or "（未提供）"}
 
 作文内容：
 {essay_content}
 
 最低字数：{min_words} 词
 
-返回如下 JSON（严格遵守格式）：
+返回如下 JSON（严格遵守字段名和 JSON 格式）：
 {{
   "estimated_band": "预估分数段，如 6.0 / 6.5 / 7.0+",
   "main_problems": [
     {{
-      "category": "雅思评分维度（Task Achievement / Coherence / Vocabulary / Grammar 之一）",
-      "issue": "具体问题（中文，1-2 句话）",
+      "category": "Task Achievement / Coherence / Vocabulary / Grammar 之一",
+      "issue": "具体问题（中文，1-2句话）",
       "severity": "high 或 medium"
     }}
   ],
   "top_sentence_fixes": [
     {{
-      "original": "原文中的问题句子（原样保留，英文）",
-      "problem": "这句话的问题说明（中文，1句话）",
-      "suggestion": "改写后的完整英文句子，可直接替换原句（用于展示，不存为资源）",
-      "resource_type": "pattern / collocation / expression 三选一",
-      "resource_name": "语言技巧名称，聚焦技巧本身，如'让步转折句'、'形容词描述工作状态'（中文，15字内）",
-      "resource_goal": "掌握后能做什么，如'用形容词替代动词短语，表达更地道'（中文，20字内）",
-      "resource_pattern": "根据resource_type生成不同内容：①pattern类型→抽象句型模板，用[...]标注可替换部分，如'[Subject] are disappearing because [agent] can [do] tasks once handled by [workers].'；②collocation类型→核心词块短语（2-6词），如'career transition'、'work-life balance'；③expression类型→功能性表达（5-15词），如'be driven by financial considerations'、'contribute significantly to'",
-      "resource_items": ["基于当前题目的1-2个完整例句，展示resource_pattern的使用方法"]
+      "scope": "word / sentence / paragraph 之一",
+      "category": "spelling / grammar / expression / logic 之一",
+      "paragraph_index": 0,
+      "sentence_index": 0,
+      "original": "原文中的对应单词、句子或段落片段（原样保留英文）",
+      "problem": "为什么要改（中文，1句话；逻辑类要说明是否跳脱、支撑不足或衔接不清）",
+      "suggestion": "修改后的对应英文内容；scope为sentence时给完整句子，scope为paragraph时给可替换段落片段",
+      "resource_type": "pattern / collocation / expression 之一",
+      "resource_name": "推荐积累名称（中文，15字内）",
+      "resource_goal": "掌握后能解决什么问题（中文，20字内）",
+      "resource_pattern": "可积累的抽象句型、搭配或表达；不要直接存整篇改写",
+      "resource_items": ["基于当前题目的1-2个英文例句"]
     }}
   ],
   "phrase_resources": [
     {{
-      "pattern": "从作文中提炼的搭配词块或功能短语（英文，2-8词），如'pursue a more fulfilling career'、'financial security'",
+      "pattern": "推荐积累的英文短语或功能表达（2-12词）",
       "name": "中文名称（10字内）",
       "goal": "用途说明（中文，15字内）",
       "type": "collocation 或 expression"
     }}
   ],
-  "template_misuse": "若发现机械套用模板迹象请说明（中文 1句），否则返回空字符串",
+  "template_misuse": "如果发现机械套模板，请中文说明；否则返回空字符串",
   "next_training_task": "下次练习的具体建议（中文，2句以内，可操作）"
 }}
 
 要求：
-- main_problems 最多 2 条，挑对分数影响最大的
-- top_sentence_fixes 最多 3 条，挑改动后提升最大的句子
-- suggestion 必须是完整英文句子，学生可直接替换到作文中
-- phrase_resources 提取 3-5 条词块/表达，必须是英文短语（不是整句），覆盖 collocation 和 expression 两种
-- 若作文内容为空或不足 30 词，estimated_band 返回 "N/A" 并说明原因"""
+- main_problems 最多 3 条，优先指出对分数影响最大的。
+- top_sentence_fixes 不再只挑 3 句；请覆盖全文，返回 8-14 条。短文可以少于 8 条，但要尽量覆盖所有关键句和至少 1 个段落级逻辑问题。
+- category 必须覆盖 spelling、grammar、expression、logic 中实际存在的问题；没有拼写问题时可以不返回 spelling。
+- paragraph_index 和 sentence_index 从 0 开始；段落级建议 sentence_index 填 -1。
+- original 必须能在作文原文中找到或是原文的连续片段，方便前端连线定位。
+- suggestion 必须是学生可直接替换到作文中的英文内容。
+- phrase_resources 提取 4-8 条系统推荐积累，必须是英文短语或功能表达，不是整句。
+- 积累只作为系统推荐返回，不要声称已经自动保存。
+- 如果作文内容为空或不足 30 词，estimated_band 返回 "N/A" 并说明原因。
+"""
 
     if image_base64:
-        # Strip data URL prefix if present (data:image/jpeg;base64,...)
         b64 = image_base64.split(",", 1)[-1]
         user_content: str | list = [
             {"type": "text", "text": user},
@@ -95,8 +103,8 @@ def run_diagnosis(
             {"role": "user", "content": user_content},
         ],
         schema={},
-        temperature=0.4,
-        max_tokens=2200,
+        temperature=0.35,
+        max_tokens=4200,
     )
 
     for key in ("estimated_band", "main_problems", "top_sentence_fixes", "next_training_task"):

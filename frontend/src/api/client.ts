@@ -223,8 +223,22 @@ export interface DiagnosisFix {
   original: string
   problem: string
   suggestion: string
+  scope?: 'word' | 'sentence' | 'paragraph'
+  category?: 'spelling' | 'grammar' | 'expression' | 'logic'
+  paragraph_index?: number
+  sentence_index?: number
   resource_name: string
   resource_type: string
+  resource_goal?: string
+  resource_pattern?: string
+  resource_items?: string[]
+}
+
+export interface DiagnosisPhraseResource {
+  pattern: string
+  name: string
+  goal: string
+  type: string
 }
 
 export interface DiagnosisResult {
@@ -232,6 +246,7 @@ export interface DiagnosisResult {
   estimated_band: string
   main_problems: DiagnosisProblem[]
   top_sentence_fixes: DiagnosisFix[]
+  phrase_resources?: DiagnosisPhraseResource[]
   template_misuse: string
   next_training_task: string
   saved_resource_count: number
@@ -325,6 +340,19 @@ export const listResources = (params?: {
   const qs = q.toString()
   return request<ResourceList>(`/resources${qs ? '?' + qs : ''}`)
 }
+
+export const createResource = (data: {
+  type: string
+  name: string
+  zh_goal: string
+  pattern: string
+  items?: string[]
+  task_type?: string
+  source_essay_id?: string | null
+}) => request<ResourceItem>('/resources', {
+  method: 'POST',
+  body: JSON.stringify(data),
+})
 
 // Essays list (history page)
 export interface EssayListItem {

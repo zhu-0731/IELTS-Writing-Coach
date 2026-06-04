@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from database import get_conn
 from services.provider import make_provider_for_feature
 from services.diagnosis_service import run_diagnosis
-from services.resource_service import extract_and_save
 
 router = APIRouter(prefix="/api/diagnosis", tags=["diagnosis"])
 
@@ -74,12 +73,11 @@ def full_diagnosis(body: DiagnosisRequest):
                     result.get("next_training_task", ""),
                 ),
             )
-            saved_ids = extract_and_save(conn, result, essay_id, body.task_type)
     finally:
         conn.close()
 
     return {
         **result,
         "diagnosis_id": diagnosis_id,
-        "saved_resource_count": len(saved_ids),
+        "saved_resource_count": 0,
     }
