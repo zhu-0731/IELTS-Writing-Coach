@@ -154,14 +154,12 @@ function ResultsScreen({
   wrongItems,
   essayId,
   mode,
-  onRetry,
 }: {
   score: number
   total: number
   wrongItems: { item: PracticeItem; userAnswer: string }[]
   essayId: string
   mode: string
-  onRetry: () => void
 }) {
   const navigate = useNavigate()
   const [retrying, setRetrying] = useState(false)
@@ -431,7 +429,6 @@ export default function PracticePage() {
         wrongItems={wrongItems}
         essayId={session.essay_id}
         mode={session.mode}
-        onRetry={() => {}}
       />
     )
   }

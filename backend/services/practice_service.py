@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+from difflib import SequenceMatcher
 
 from services.provider import LLMProvider
 
@@ -39,6 +40,177 @@ def _levenshtein(a: str, b: str) -> int:
             new_row.append(min(new_row[-1] + 1, row[j + 1] + 1, row[j] + (ch != dch)))
         row = new_row
     return row[-1]
+
+
+# ── Local fallback generation ─────────────────────────────────────────────────
+
+_STOP_WORDS = {
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "to", "of", "in", "on", "for", "with", "and", "or", "but", "it", "this",
+    "that", "as", "by", "at", "from", "can", "could", "should", "would",
+    "will", "may", "might", "do", "does", "did", "not",
+}
+
+
+def _short(text: str, limit: int) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    return text if len(text) <= limit else text[: max(0, limit - 1)] + "…"
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?|\d+(?:\.\d+)?", text or "")
+
+
+def _changed_phrase(original: str, suggestion: str) -> str:
+    """Pick the first meaningful changed phrase from a sentence correction."""
+    o_words = _words(original)
+    s_words = _words(suggestion)
+    if not s_words:
+        return ""
+
+    matcher = SequenceMatcher(
+        None,
+        [w.lower() for w in o_words],
+        [w.lower() for w in s_words],
+    )
+    for tag, _i1, _i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        changed = s_words[j1:j2]
+        changed = [w for w in changed if w.lower() not in _STOP_WORDS]
+        if 1 <= len(changed) <= 6:
+            return " ".join(changed)
+
+    # No clean diff: use a non-trivial content word.
+    for w in s_words:
+        if len(w) >= 5 and w.lower() not in _STOP_WORDS:
+            return w
+    return s_words[0]
+
+
+def _choose_answer(sentence: str, preferred: str = "") -> str:
+    if preferred and re.search(re.escape(preferred), sentence, flags=re.IGNORECASE):
+        return preferred
+    for phrase in (
+        "better placed",
+        "on a larger scale",
+        "take responsibility",
+        "introduce policies",
+        "implement policies",
+        "enforce regulations",
+        "address",
+        "allocate",
+        "contribute",
+        "effective",
+    ):
+        match = re.search(re.escape(phrase), sentence, flags=re.IGNORECASE)
+        if match:
+            return sentence[match.start():match.end()]
+    for w in _words(sentence):
+        if len(w) >= 6 and w.lower() not in _STOP_WORDS:
+            return w
+    return ""
+
+
+def _blank_once(sentence: str, answer: str) -> str:
+    if not sentence or not answer:
+        return ""
+    pattern = re.escape(answer)
+    display = re.sub(pattern, "___", sentence, count=1, flags=re.IGNORECASE)
+    return display if display != sentence else ""
+
+
+def _dedupe_items(items: list[dict], limit: int) -> list[dict]:
+    seen: set[tuple[str, str]] = set()
+    out: list[dict] = []
+    for item in items:
+        key = (item.get("sentence_display", ""), item.get("answer", "").lower())
+        if key in seen or not key[0] or not key[1]:
+            continue
+        seen.add(key)
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _fallback_practice_items(
+    mode: str,
+    fixes: list[dict],
+    resources,
+    n_items: int,
+) -> list[dict]:
+    """Generate usable practice items without LLM JSON.
+
+    This keeps the product usable when a model returns malformed/truncated JSON.
+    The items are intentionally simple and sourced from diagnosis/resource data.
+    """
+    items: list[dict] = []
+
+    if mode == "dictation":
+        for fix in fixes:
+            sentence = (fix.get("suggestion") or "").strip()
+            if not sentence:
+                continue
+            items.append({
+                "category": "dictation",
+                "sentence_original": sentence,
+                "sentence_display": "___",
+                "answer": sentence,
+                "hint_zh": _short(fix.get("problem") or fix.get("resource_name") or "改写句", 15),
+                "explanation_zh": _short(fix.get("problem") or "注意整句结构和固定搭配", 40),
+            })
+        for r in resources:
+            sentence = (r["pattern"] or "").strip()
+            if not sentence or "[" in sentence or len(_words(sentence)) < 5:
+                continue
+            items.append({
+                "category": "dictation",
+                "sentence_original": sentence,
+                "sentence_display": "___",
+                "answer": sentence,
+                "hint_zh": _short(r["zh_goal"] or r["name"] or "资源句", 15),
+                "explanation_zh": _short(r["zh_goal"] or "注意整句结构和固定搭配", 40),
+            })
+        return _dedupe_items(items, n_items)
+
+    for fix in fixes:
+        sentence = (fix.get("suggestion") or "").strip()
+        if not sentence:
+            continue
+        answer = _changed_phrase(fix.get("original", ""), sentence)
+        answer = _choose_answer(sentence, answer)
+        display = _blank_once(sentence, answer)
+        if not display:
+            continue
+        category = "grammar" if fix.get("resource_type") == "pattern" else "vocabulary"
+        items.append({
+            "category": category,
+            "sentence_original": sentence,
+            "sentence_display": display,
+            "answer": answer,
+            "hint_zh": _short(fix.get("resource_name") or "改写点", 8),
+            "explanation_zh": _short(fix.get("problem") or "来自诊断改写句", 40),
+        })
+
+    for r in resources:
+        sentence = (r["pattern"] or "").strip()
+        if not sentence or "[" in sentence or len(_words(sentence)) < 4:
+            continue
+        answer = _choose_answer(sentence)
+        display = _blank_once(sentence, answer)
+        if not display:
+            continue
+        items.append({
+            "category": "vocabulary",
+            "sentence_original": sentence,
+            "sentence_display": display,
+            "answer": answer,
+            "hint_zh": _short(r["name"] or "关键词", 8),
+            "explanation_zh": _short(r["zh_goal"] or "练习这个表达的迁移使用", 40),
+        })
+
+    return _dedupe_items(items, n_items)
 
 
 # ── LLM generation ────────────────────────────────────────────────────────────
@@ -156,6 +328,7 @@ Rules:
 - hint_zh ≤ 15 chars — Chinese meaning of the sentence
 - explanation_zh: key grammar points to remember"""
 
+    result: dict
     try:
         result = provider.chat_json(
             messages=[
@@ -170,7 +343,10 @@ Rules:
             max_tokens=6000,
         )
     except Exception as e:
-        raise ValueError(f"练习题生成失败：{e}") from e
+        fallback_items = _fallback_practice_items(mode, fixes, resources, n_items)
+        if not fallback_items:
+            raise ValueError(f"练习题生成失败：{e}") from e
+        result = {"items": fallback_items}
 
     items_data = result.get('items', [])
     if not items_data:
