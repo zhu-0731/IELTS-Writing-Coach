@@ -1,6 +1,40 @@
 from typing import Protocol, Any
+import sys
 import httpx
 import json
+
+
+def _parse_json_loose(raw: str) -> dict:
+    """Parse JSON tolerantly: handle markdown fences and surrounding prose.
+
+    Note: cannot recover from a truncated response — that needs a higher
+    max_tokens at the call site.
+    """
+    raw = (raw or "").strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # Strip ```json ... ``` fences if present
+    if raw.startswith("```"):
+        inner = raw.split("```")
+        if len(inner) >= 2:
+            candidate = inner[1]
+            if candidate.lstrip().lower().startswith("json"):
+                candidate = candidate.lstrip()[4:]
+            try:
+                return json.loads(candidate.strip())
+            except json.JSONDecodeError:
+                pass
+
+    # Fall back to first '{' .. last '}'
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return json.loads(raw[start:end + 1])
+
+    raise ValueError("模型返回内容不是有效 JSON（可能被截断或格式异常）")
 
 
 class LLMProvider(Protocol):
@@ -47,15 +81,36 @@ class OpenAICompatibleProvider:
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "response_format": {"type": "json_object"},
         }
-        with httpx.Client(timeout=60) as client:
+        with httpx.Client(timeout=90) as client:
             resp = client.post(
                 f"{self.base_url}/chat/completions",
                 headers=self._headers(),
                 json=payload,
             )
             resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"]
-            return json.loads(raw)
+            choice = resp.json()["choices"][0]
+            raw = (choice.get("message") or {}).get("content", "") or ""
+            finish = choice.get("finish_reason")
+            try:
+                return _parse_json_loose(raw)
+            except ValueError:
+                snippet = raw[:600].replace("\n", "\\n")
+                print(
+                    f"[chat_json] JSON parse failed | finish_reason={finish} "
+                    f"| content_len={len(raw)} | snippet={snippet!r}",
+                    file=sys.stderr,
+                )
+                if finish == "length":
+                    raise ValueError(
+                        "模型输出过长被截断（finish_reason=length）。"
+                        "请到「设置」调高最大输出 Token，或改用支持更长输出的模型后重试"
+                    )
+                if not raw.strip():
+                    raise ValueError(
+                        "模型返回了空内容。若使用推理类模型（如 o1/r1），"
+                        "请调高最大输出 Token，使其在思考后仍有足够额度输出 JSON"
+                    )
+                raise
 
 
 def make_provider_from_db(row) -> OpenAICompatibleProvider:

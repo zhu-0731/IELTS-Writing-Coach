@@ -110,3 +110,16 @@ def get_essay(essay_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Essay not found")
     return dict(row)
+
+
+@router.delete("/api/essays/{essay_id}", status_code=204)
+def delete_essay(essay_id: str):
+    db = get_conn()
+    row = db.execute("SELECT essay_id FROM essays WHERE essay_id = ?", (essay_id,)).fetchone()
+    if not row:
+        db.close()
+        raise HTTPException(status_code=404, detail="Essay not found")
+    db.execute("DELETE FROM diagnoses WHERE essay_id = ?", (essay_id,))
+    db.execute("DELETE FROM essays WHERE essay_id = ?", (essay_id,))
+    db.commit()
+    db.close()

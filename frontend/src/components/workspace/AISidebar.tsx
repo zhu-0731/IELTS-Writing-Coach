@@ -91,7 +91,12 @@ export default function AISidebar({
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {activeTab === 'hint' && (
-          <HintTab taskType={taskType} essayId={essayId} />
+          <HintTab
+            taskType={taskType}
+            essayId={essayId}
+            prompt={prompt}
+            questionType={questionType}
+          />
         )}
         {activeTab === 'idea' && (
           <IdeaTab

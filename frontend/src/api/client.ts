@@ -126,6 +126,21 @@ export const recordHintAction = (
   body: JSON.stringify(data),
 })
 
+export interface MatchHintsResult {
+  context: string
+  hints: HintCard[]
+}
+
+export const matchHints = (data: {
+  prompt: string
+  task_type: string
+  essay_id?: string | null
+  limit?: number
+}) => request<MatchHintsResult>('/hints/match', {
+  method: 'POST',
+  body: JSON.stringify(data),
+})
+
 // Idea Coach
 export interface IdeaStance {
   label: string
@@ -305,3 +320,69 @@ export const listEssays = (params?: { limit?: number; offset?: number }) => {
 
 export const getEssayContent = (essayId: string) =>
   request<EssayData>(`/essays/${essayId}`)
+
+export const deleteEssay = (essayId: string) =>
+  fetch(`${BASE}/essays/${essayId}`, { method: 'DELETE' })
+
+export const deleteResource = (resourceId: string) =>
+  fetch(`${BASE}/resources/${resourceId}`, { method: 'DELETE' })
+
+// Practice
+export interface PracticeItem {
+  item_id: string
+  session_id: string
+  order_idx: number
+  category: string        // 'grammar' | 'vocabulary' | 'dictation'
+  sentence_original: string
+  sentence_display: string
+  answer: string
+  hint_zh: string
+  explanation_zh: string
+}
+
+export interface PracticeSession {
+  session_id: string
+  essay_id: string
+  mode: string            // 'cloze' | 'dictation'
+  status: string          // 'in_progress' | 'completed'
+  score: number
+  total: number
+  created_at: string
+  items: PracticeItem[]
+}
+
+export interface PracticeSessionSummary {
+  session_id: string
+  essay_id: string
+  mode: string
+  status: string
+  score: number
+  total: number
+  created_at: string
+  task_type: string
+  prompt: string
+}
+
+export const generatePractice = (data: { essay_id: string; mode?: string }) =>
+  request<{ session_id: string; total: number; mode: string }>(
+    '/practice/generate',
+    { method: 'POST', body: JSON.stringify(data) },
+  )
+
+export const getPracticeSession = (sessionId: string) =>
+  request<PracticeSession>(`/practice/session/${sessionId}`)
+
+export const completePracticeSession = (sessionId: string, score: number) =>
+  request<{ ok: boolean }>(`/practice/session/${sessionId}/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ score }),
+  })
+
+export const deletePracticeSession = (sessionId: string) =>
+  request<{ ok: boolean }>(`/practice/session/${sessionId}`, { method: 'DELETE' })
+
+export const listPracticeSessions = (limit = 10) =>
+  request<PracticeSessionSummary[]>(`/practice/sessions?limit=${limit}`)
+
+export const getLatestPracticeForEssay = (essayId: string) =>
+  request<PracticeSessionSummary | null>(`/practice/essay/${essayId}/latest`)

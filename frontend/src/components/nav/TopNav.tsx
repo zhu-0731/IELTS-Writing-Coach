@@ -11,8 +11,21 @@ const NAV_ITEMS = [
   { to: '/history',   label: c.history   },
 ]
 
+const WORKSPACE_KEYS = [
+  'workspace_active_task',
+  'workspace_draft_task1',
+  'workspace_draft_task2',
+  'workspace_idea',
+  'workspace_expression',
+]
+
 export default function TopNav() {
   const navigate = useNavigate()
+
+  const startNew = () => {
+    WORKSPACE_KEYS.forEach((k) => sessionStorage.removeItem(k))
+    navigate('/workspace')
+  }
 
   return (
     <header className="bg-surface border-b border-line sticky top-0 z-40 h-14">
@@ -51,10 +64,10 @@ export default function TopNav() {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => navigate('/workspace')}
+            onClick={startNew}
             className="hidden sm:inline-flex"
           >
-            {c.startWriting}
+            {c.startNew}
           </Button>
           <NavLink
             to="/settings"

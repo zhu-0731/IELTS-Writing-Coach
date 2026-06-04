@@ -51,10 +51,21 @@ def run_diagnosis(
   "top_sentence_fixes": [
     {{
       "original": "原文中的问题句子（原样保留，英文）",
-      "problem": "这句话的问题说明（中文）",
-      "suggestion": "改写后的完整英文句子，可直接替换原句",
-      "resource_name": "可从此改写中提炼的语言资源名称（中文，10字内）",
-      "resource_type": "expression / pattern / collocation 三选一"
+      "problem": "这句话的问题说明（中文，1句话）",
+      "suggestion": "改写后的完整英文句子，可直接替换原句（用于展示，不存为资源）",
+      "resource_type": "pattern / collocation / expression 三选一",
+      "resource_name": "语言技巧名称，聚焦技巧本身，如'让步转折句'、'形容词描述工作状态'（中文，15字内）",
+      "resource_goal": "掌握后能做什么，如'用形容词替代动词短语，表达更地道'（中文，20字内）",
+      "resource_pattern": "根据resource_type生成不同内容：①pattern类型→抽象句型模板，用[...]标注可替换部分，如'[Subject] are disappearing because [agent] can [do] tasks once handled by [workers].'；②collocation类型→核心词块短语（2-6词），如'career transition'、'work-life balance'；③expression类型→功能性表达（5-15词），如'be driven by financial considerations'、'contribute significantly to'",
+      "resource_items": ["基于当前题目的1-2个完整例句，展示resource_pattern的使用方法"]
+    }}
+  ],
+  "phrase_resources": [
+    {{
+      "pattern": "从作文中提炼的搭配词块或功能短语（英文，2-8词），如'pursue a more fulfilling career'、'financial security'",
+      "name": "中文名称（10字内）",
+      "goal": "用途说明（中文，15字内）",
+      "type": "collocation 或 expression"
     }}
   ],
   "template_misuse": "若发现机械套用模板迹象请说明（中文 1句），否则返回空字符串",
@@ -65,6 +76,7 @@ def run_diagnosis(
 - main_problems 最多 2 条，挑对分数影响最大的
 - top_sentence_fixes 最多 3 条，挑改动后提升最大的句子
 - suggestion 必须是完整英文句子，学生可直接替换到作文中
+- phrase_resources 提取 3-5 条词块/表达，必须是英文短语（不是整句），覆盖 collocation 和 expression 两种
 - 若作文内容为空或不足 30 词，estimated_band 返回 "N/A" 并说明原因"""
 
     if image_base64:
@@ -84,7 +96,7 @@ def run_diagnosis(
         ],
         schema={},
         temperature=0.4,
-        max_tokens=1600,
+        max_tokens=2200,
     )
 
     for key in ("estimated_band", "main_problems", "top_sentence_fixes", "next_training_task"):
