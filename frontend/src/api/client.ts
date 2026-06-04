@@ -258,6 +258,7 @@ export interface DiagnosisResult {
   saved_resource_count: number
   diagnosis_status?: 'complete' | 'partial_failed'
   failed_tasks?: DiagnosisFailedTask[]
+  save_error?: string
 }
 
 export const runDiagnosis = (data: {

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -45,6 +46,8 @@ def _save_diagnosis_result(
 ) -> None:
     conn = get_conn()
     try:
+        conn.execute("PRAGMA query_only=OFF")
+        conn.execute("PRAGMA busy_timeout=5000")
         with conn:
             if update_existing:
                 existing = conn.execute(
@@ -91,6 +94,16 @@ def _save_diagnosis_result(
         conn.close()
 
 
+def _try_save_diagnosis_result(**kwargs) -> str:
+    try:
+        _save_diagnosis_result(**kwargs)
+        return ""
+    except sqlite3.OperationalError as exc:
+        message = f"诊断结果保存失败：{exc}"
+        print(f"[diagnosis] {message}")
+        return message
+
+
 @router.post("/full")
 def full_diagnosis(body: DiagnosisRequest):
     if not body.content.strip():
@@ -114,12 +127,17 @@ def full_diagnosis(body: DiagnosisRequest):
 
     diagnosis_id = str(uuid.uuid4())
     essay_id = body.essay_id or f"tmp-{uuid.uuid4()}"
-    _save_diagnosis_result(diagnosis_id=diagnosis_id, essay_id=essay_id, result=result)
+    save_error = _try_save_diagnosis_result(
+        diagnosis_id=diagnosis_id,
+        essay_id=essay_id,
+        result=result,
+    )
 
     return {
         **result,
         "diagnosis_id": diagnosis_id,
         "saved_resource_count": 0,
+        "save_error": save_error,
     }
 
 
@@ -148,7 +166,7 @@ def retry_diagnosis(body: DiagnosisRetryRequest):
 
     diagnosis_id = body.diagnosis_id or body.previous_result.get("diagnosis_id") or str(uuid.uuid4())
     essay_id = body.essay_id or f"tmp-{uuid.uuid4()}"
-    _save_diagnosis_result(
+    save_error = _try_save_diagnosis_result(
         diagnosis_id=diagnosis_id,
         essay_id=essay_id,
         result=result,
@@ -159,4 +177,5 @@ def retry_diagnosis(body: DiagnosisRetryRequest):
         **result,
         "diagnosis_id": diagnosis_id,
         "saved_resource_count": 0,
+        "save_error": save_error,
     }
