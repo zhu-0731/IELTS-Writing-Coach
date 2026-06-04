@@ -88,6 +88,74 @@ def _changed_phrase(original: str, suggestion: str) -> str:
     return s_words[0]
 
 
+def _changed_pair(original: str, suggestion: str) -> tuple[str, str]:
+    """Return (original phrase, improved phrase) for the first useful diff."""
+    o_words = _words(original)
+    s_words = _words(suggestion)
+    if not o_words or not s_words:
+        return "", _changed_phrase(original, suggestion)
+
+    matcher = SequenceMatcher(
+        None,
+        [w.lower() for w in o_words],
+        [w.lower() for w in s_words],
+    )
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        old = o_words[i1:i2]
+        new = [w for w in s_words[j1:j2] if w.lower() not in _STOP_WORDS]
+        if 1 <= len(new) <= 6:
+            return " ".join(old), " ".join(new)
+    return "", _changed_phrase(original, suggestion)
+
+
+_VARIANT_MAP: dict[str, list[str]] = {
+    "introduce": ["implement", "enforce", "adopt"],
+    "implement": ["introduce", "enforce", "adopt"],
+    "enforce": ["implement", "introduce"],
+    "allocate": ["provide", "assign"],
+    "address": ["deal with", "tackle"],
+    "reduce": ["decrease", "lower"],
+    "job instability": ["employment instability", "job insecurity", "unstable employment"],
+    "on a larger scale": ["at a broader level", "on a wider scale"],
+}
+
+
+def _answer_variants(answer: str) -> list[str]:
+    answer = re.sub(r"\s+", " ", (answer or "").strip())
+    if not answer:
+        return []
+    variants = [answer]
+    lower = answer.lower()
+    variants.extend(_VARIANT_MAP.get(lower, []))
+    if " " in answer:
+        for key, vals in _VARIANT_MAP.items():
+            if key in lower:
+                variants.extend(vals)
+    out: list[str] = []
+    seen: set[str] = set()
+    for v in variants:
+        k = v.lower().strip()
+        if k and k not in seen:
+            seen.add(k)
+            out.append(v)
+    return out
+
+
+def _json_list(value) -> str:
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            value = parsed
+        except json.JSONDecodeError:
+            value = [p.strip() for p in re.split(r"[/;,，；]", value) if p.strip()]
+    if not isinstance(value, list):
+        value = []
+    cleaned = [str(v).strip() for v in value if str(v).strip()]
+    return json.dumps(cleaned, ensure_ascii=False)
+
+
 def _choose_answer(sentence: str, preferred: str = "") -> str:
     if preferred and re.search(re.escape(preferred), sentence, flags=re.IGNORECASE):
         return preferred
@@ -152,13 +220,22 @@ def _fallback_practice_items(
             sentence = (fix.get("suggestion") or "").strip()
             if not sentence:
                 continue
+            weak_answer, answer = _changed_pair(fix.get("original", ""), sentence)
+            answer = _choose_answer(sentence, answer)
             items.append({
                 "category": "dictation",
                 "sentence_original": sentence,
                 "sentence_display": "___",
                 "answer": sentence,
+                "acceptable_answers": [sentence],
+                "weak_answer": "",
                 "hint_zh": _short(fix.get("problem") or fix.get("resource_name") or "改写句", 15),
-                "explanation_zh": _short(fix.get("problem") or "注意整句结构和固定搭配", 40),
+                "explanation_zh": _short(
+                    fix.get("problem")
+                    or (f"注意用 {answer} 替换 {weak_answer}" if weak_answer else "")
+                    or "注意整句结构和固定搭配",
+                    40,
+                ),
             })
         for r in resources:
             sentence = (r["pattern"] or "").strip()
@@ -169,6 +246,8 @@ def _fallback_practice_items(
                 "sentence_original": sentence,
                 "sentence_display": "___",
                 "answer": sentence,
+                "acceptable_answers": [sentence],
+                "weak_answer": "",
                 "hint_zh": _short(r["zh_goal"] or r["name"] or "资源句", 15),
                 "explanation_zh": _short(r["zh_goal"] or "注意整句结构和固定搭配", 40),
             })
@@ -178,7 +257,7 @@ def _fallback_practice_items(
         sentence = (fix.get("suggestion") or "").strip()
         if not sentence:
             continue
-        answer = _changed_phrase(fix.get("original", ""), sentence)
+        weak_answer, answer = _changed_pair(fix.get("original", ""), sentence)
         answer = _choose_answer(sentence, answer)
         display = _blank_once(sentence, answer)
         if not display:
@@ -189,6 +268,8 @@ def _fallback_practice_items(
             "sentence_original": sentence,
             "sentence_display": display,
             "answer": answer,
+            "acceptable_answers": _answer_variants(answer),
+            "weak_answer": weak_answer,
             "hint_zh": _short(fix.get("resource_name") or "改写点", 8),
             "explanation_zh": _short(fix.get("problem") or "来自诊断改写句", 40),
         })
@@ -206,6 +287,8 @@ def _fallback_practice_items(
             "sentence_original": sentence,
             "sentence_display": display,
             "answer": answer,
+            "acceptable_answers": _answer_variants(answer),
+            "weak_answer": "",
             "hint_zh": _short(r["name"] or "关键词", 8),
             "explanation_zh": _short(r["zh_goal"] or "练习这个表达的迁移使用", 40),
         })
@@ -285,6 +368,8 @@ Return exactly this JSON shape:
       "sentence_original": "The government should allocate more funds to education.",
       "sentence_display": "The government should ___ more funds to education.",
       "answer": "allocate",
+      "acceptable_answers": ["allocate", "provide"],
+      "weak_answer": "give",
       "hint_zh": "动词：分配",
       "explanation_zh": "allocate sth to sth 是固定搭配，表示将资源分配给某方面"
     }}
@@ -293,7 +378,9 @@ Return exactly this JSON shape:
 
 Rules:
 - sentence_display must contain EXACTLY ONE ___
-- answer is the exact word(s) that fill ___
+- answer is the recommended word(s) that fill ___
+- acceptable_answers lists 2-4 valid alternatives if natural in this sentence, including answer
+- weak_answer is the student's original/common/basic expression if it appears in the diagnosis original sentence; otherwise ""
 - hint_zh ≤ 8 chars, gives a type/semantic clue — NOT the answer itself
 - explanation_zh is one short Chinese sentence explaining why
 - For grammar items: blank the corrected word/phrase (use the suggestion sentence)
@@ -316,6 +403,8 @@ Return JSON:
       "sentence_original": "The government should allocate more funds to education.",
       "sentence_display": "___",
       "answer": "The government should allocate more funds to education.",
+      "acceptable_answers": ["The government should allocate more funds to education."],
+      "weak_answer": "",
       "hint_zh": "政府应增加教育资金",
       "explanation_zh": "注意主语后用should+动词原形，allocate...to表示分配"
     }}
@@ -375,12 +464,16 @@ Rules:
             (session_id, essay_id, mode, len(valid)),
         )
         for idx, item in enumerate(valid):
+            acceptable = item.get("acceptable_answers")
+            if not acceptable:
+                acceptable = _answer_variants(item.get("answer", ""))
             conn.execute(
                 """INSERT INTO practice_items
                    (item_id, session_id, order_idx, category,
                     sentence_original, sentence_display,
-                    answer, hint_zh, explanation_zh)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    answer, acceptable_answers_json, weak_answer,
+                    hint_zh, explanation_zh)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     str(uuid.uuid4()),
                     session_id,
@@ -389,6 +482,8 @@ Rules:
                     item.get('sentence_original', ''),
                     item.get('sentence_display', '___'),
                     item.get('answer', ''),
+                    _json_list(acceptable),
+                    item.get('weak_answer', ''),
                     item.get('hint_zh', ''),
                     item.get('explanation_zh', ''),
                 ),
@@ -397,8 +492,23 @@ Rules:
     return {'session_id': session_id, 'total': len(valid), 'mode': mode}
 
 
-def complete_session(conn, session_id: str, score: int) -> None:
+def complete_session(conn, session_id: str, score: int, item_results: list[dict] | None = None) -> None:
     with conn:
+        for item in item_results or []:
+            item_id = (item.get("item_id") or "").strip()
+            if not item_id:
+                continue
+            conn.execute(
+                """UPDATE practice_items
+                   SET user_answer = ?, is_correct = ?
+                   WHERE item_id = ? AND session_id = ?""",
+                (
+                    item.get("user_answer", ""),
+                    1 if item.get("is_correct") else 0,
+                    item_id,
+                    session_id,
+                ),
+            )
         conn.execute(
             """UPDATE practice_sessions
                SET status = 'completed', score = ?, updated_at = datetime('now')

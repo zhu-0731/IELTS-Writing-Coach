@@ -62,6 +62,42 @@ export const getSettings = () =>
 export const saveSettings = (data: SettingsWrite) =>
   request<SettingsData>('/settings', { method: 'PUT', body: JSON.stringify(data) })
 
+// Per-feature LLM overrides
+export type FeatureKey = 'diagnosis' | 'practice'
+
+export interface FeatureSettings {
+  feature: string
+  enabled: boolean
+  model_name: string
+  base_url: string
+  api_key_masked: string
+  temperature: number
+  max_tokens: number
+  // Effective config after override/fallback resolution
+  effective_source: 'general' | 'feature'
+  effective_model_name: string
+  effective_base_url: string
+  effective_api_key_masked: string
+}
+
+export interface FeatureSettingsWrite {
+  enabled?: boolean
+  model_name?: string
+  base_url?: string
+  api_key?: string
+  temperature?: number
+  max_tokens?: number
+}
+
+export const getFeatureSettings = () =>
+  request<Record<FeatureKey, FeatureSettings>>('/settings/features')
+
+export const saveFeatureSettings = (feature: FeatureKey, data: FeatureSettingsWrite) =>
+  request<FeatureSettings>(`/settings/features/${feature}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+
 // Data reset
 export const resetAllData = () =>
   request<{ ok: boolean }>('/data/reset', { method: 'POST' })
@@ -187,18 +223,53 @@ export interface DiagnosisFix {
   original: string
   problem: string
   suggestion: string
+  scope?: 'word' | 'sentence' | 'paragraph'
+  category?: 'spelling' | 'grammar' | 'expression' | 'logic'
+  paragraph_index?: number
+  sentence_index?: number
   resource_name: string
   resource_type: string
+  resource_goal?: string
+  resource_pattern?: string
+  resource_items?: string[]
+}
+
+export interface DiagnosisPhraseResource {
+  pattern: string
+  name: string
+  goal: string
+  type: string
+}
+
+export interface DiagnosisFailedTask {
+  key: string
+  label: string
+  error: string
 }
 
 export interface DiagnosisResult {
   diagnosis_id: string
+  essay_id?: string
+  created_at?: string
   estimated_band: string
   main_problems: DiagnosisProblem[]
   top_sentence_fixes: DiagnosisFix[]
+  phrase_resources?: DiagnosisPhraseResource[]
   template_misuse: string
   next_training_task: string
   saved_resource_count: number
+  diagnosis_status?: 'complete' | 'partial_failed'
+  failed_tasks?: DiagnosisFailedTask[]
+  save_error?: string
+}
+
+export interface DiagnosisSummaryItem {
+  diagnosis_id: string
+  essay_id: string
+  estimated_band: string | null
+  created_at: string
+  main_problems: DiagnosisProblem[]
+  next_training_task: string
 }
 
 export const runDiagnosis = (data: {
@@ -209,6 +280,27 @@ export const runDiagnosis = (data: {
   content: string
   image_base64?: string
 }) => request<DiagnosisResult>('/diagnosis/full', { method: 'POST', body: JSON.stringify(data) })
+
+export const retryDiagnosis = (data: {
+  diagnosis_id?: string | null
+  essay_id?: string | null
+  task_type: string
+  question_type: string
+  prompt: string
+  content: string
+  image_base64?: string
+  failed_task_keys: string[]
+  previous_result: DiagnosisResult
+}) => request<DiagnosisResult>('/diagnosis/retry', { method: 'POST', body: JSON.stringify(data) })
+
+export const listDiagnosesForEssay = (essayId: string) =>
+  request<{ items: DiagnosisSummaryItem[] }>(`/diagnosis/essay/${essayId}`)
+
+export const getDiagnosis = (diagnosisId: string) =>
+  request<DiagnosisResult>(`/diagnosis/${diagnosisId}`)
+
+export const deleteDiagnosis = (diagnosisId: string) =>
+  request<{ ok: boolean; essay_id: string }>(`/diagnosis/${diagnosisId}`, { method: 'DELETE' })
 
 // Home summary
 export interface HomeResource {
@@ -290,6 +382,19 @@ export const listResources = (params?: {
   return request<ResourceList>(`/resources${qs ? '?' + qs : ''}`)
 }
 
+export const createResource = (data: {
+  type: string
+  name: string
+  zh_goal: string
+  pattern: string
+  items?: string[]
+  task_type?: string
+  source_essay_id?: string | null
+}) => request<ResourceItem>('/resources', {
+  method: 'POST',
+  body: JSON.stringify(data),
+})
+
 // Essays list (history page)
 export interface EssayListItem {
   essay_id: string
@@ -336,8 +441,12 @@ export interface PracticeItem {
   sentence_original: string
   sentence_display: string
   answer: string
+  acceptable_answers_json: string
+  weak_answer: string
   hint_zh: string
   explanation_zh: string
+  user_answer: string
+  is_correct: number | null
 }
 
 export interface PracticeSession {
@@ -372,14 +481,31 @@ export const generatePractice = (data: { essay_id: string; mode?: string }) =>
 export const getPracticeSession = (sessionId: string) =>
   request<PracticeSession>(`/practice/session/${sessionId}`)
 
-export const completePracticeSession = (sessionId: string, score: number) =>
+export const completePracticeSession = (
+  sessionId: string,
+  score: number,
+  itemResults: { item_id: string; user_answer: string; is_correct: boolean }[] = [],
+) =>
   request<{ ok: boolean }>(`/practice/session/${sessionId}/complete`, {
     method: 'POST',
-    body: JSON.stringify({ score }),
+    body: JSON.stringify({ score, item_results: itemResults }),
   })
 
 export const deletePracticeSession = (sessionId: string) =>
   request<{ ok: boolean }>(`/practice/session/${sessionId}`, { method: 'DELETE' })
+
+export interface PracticeAppealResult {
+  accepted: boolean
+  verdict: string
+  reason_zh: string
+  acceptable_answers: string[]
+}
+
+export const appealPracticeAnswer = (data: { item_id: string; user_answer: string }) =>
+  request<PracticeAppealResult>('/practice/appeal', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
 
 export const listPracticeSessions = (limit = 10) =>
   request<PracticeSessionSummary[]>(`/practice/sessions?limit=${limit}`)

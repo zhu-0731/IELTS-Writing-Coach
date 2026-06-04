@@ -95,8 +95,24 @@ def init_db() -> None:
             main_problems_json      TEXT NOT NULL DEFAULT '[]',
             top_sentence_fixes_json TEXT NOT NULL DEFAULT '[]',
             hint_usage_feedback_json TEXT NOT NULL DEFAULT '[]',
+            diagnosis_result_json   TEXT NOT NULL DEFAULT '{}',
             next_training_task      TEXT NOT NULL DEFAULT '',
             created_at              TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS feature_settings (
+            feature     TEXT PRIMARY KEY,   -- 'diagnosis' | 'practice'
+            enabled     INTEGER NOT NULL DEFAULT 0,
+            provider    TEXT    NOT NULL DEFAULT 'openai_compatible',
+            model_name  TEXT    NOT NULL DEFAULT '',
+            base_url    TEXT    NOT NULL DEFAULT '',
+            api_key     TEXT    NOT NULL DEFAULT '',
+            supports_vision         INTEGER NOT NULL DEFAULT 0,
+            supports_json_schema    INTEGER NOT NULL DEFAULT 1,
+            supports_tool_calling   INTEGER NOT NULL DEFAULT 1,
+            temperature             REAL    NOT NULL DEFAULT 0.7,
+            max_tokens              INTEGER NOT NULL DEFAULT 2048,
+            updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS practice_sessions (
@@ -118,15 +134,55 @@ def init_db() -> None:
             sentence_original   TEXT NOT NULL DEFAULT '',
             sentence_display    TEXT NOT NULL DEFAULT '',
             answer              TEXT NOT NULL DEFAULT '',
+            acceptable_answers_json TEXT NOT NULL DEFAULT '[]',
+            weak_answer         TEXT NOT NULL DEFAULT '',
             hint_zh             TEXT NOT NULL DEFAULT '',
             explanation_zh      TEXT NOT NULL DEFAULT '',
+            user_answer         TEXT NOT NULL DEFAULT '',
+            is_correct          INTEGER,
             created_at          TEXT NOT NULL DEFAULT (datetime('now'))
         );
     """)
+    _ensure_diagnosis_columns(conn)
+    _ensure_practice_item_columns(conn)
     # Seed initial language resources in a separate transaction
     with conn:
         _seed_resources(conn)
     conn.close()
+
+
+def _ensure_diagnosis_columns(conn: sqlite3.Connection) -> None:
+    cols = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(diagnoses)").fetchall()
+    }
+    if "diagnosis_result_json" not in cols:
+        conn.execute(
+            "ALTER TABLE diagnoses ADD COLUMN diagnosis_result_json TEXT NOT NULL DEFAULT '{}'"
+        )
+
+
+def _ensure_practice_item_columns(conn: sqlite3.Connection) -> None:
+    cols = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(practice_items)").fetchall()
+    }
+    if "user_answer" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN user_answer TEXT NOT NULL DEFAULT ''"
+        )
+    if "is_correct" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN is_correct INTEGER"
+        )
+    if "acceptable_answers_json" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN acceptable_answers_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "weak_answer" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN weak_answer TEXT NOT NULL DEFAULT ''"
+        )
 
 
 def _seed_resources(conn: sqlite3.Connection) -> None:

@@ -24,7 +24,7 @@ export default function TopNav() {
 
   const startNew = () => {
     WORKSPACE_KEYS.forEach((k) => sessionStorage.removeItem(k))
-    navigate('/workspace')
+    navigate('/workspace', { state: { newDraftAt: Date.now() } })
   }
 
   return (

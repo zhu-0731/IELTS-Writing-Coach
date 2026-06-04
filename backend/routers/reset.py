@@ -9,6 +9,8 @@ CLEARABLE_TABLES = [
     "language_resources",
     "hint_usage",
     "diagnoses",
+    "practice_items",
+    "practice_sessions",
 ]
 
 @router.post("/api/data/reset")

@@ -171,6 +171,13 @@ export default function HintTab({ taskType, essayId, prompt, questionType: _ques
   }
 
   const fireAction = (card: HintCard, action: Action) => {
+    setHints((prev) => {
+      const next = prev.filter((h) => h.resource_id !== card.resource_id)
+      if (next.length === 0) {
+        window.setTimeout(() => { loadRegular() }, 0)
+      }
+      return next
+    })
     recordHintAction(card.resource_id, { essay_id: essayId, action }).catch(() => {})
   }
 
