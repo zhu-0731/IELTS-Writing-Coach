@@ -95,6 +95,7 @@ def init_db() -> None:
             main_problems_json      TEXT NOT NULL DEFAULT '[]',
             top_sentence_fixes_json TEXT NOT NULL DEFAULT '[]',
             hint_usage_feedback_json TEXT NOT NULL DEFAULT '[]',
+            diagnosis_result_json   TEXT NOT NULL DEFAULT '{}',
             next_training_task      TEXT NOT NULL DEFAULT '',
             created_at              TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -142,11 +143,23 @@ def init_db() -> None:
             created_at          TEXT NOT NULL DEFAULT (datetime('now'))
         );
     """)
+    _ensure_diagnosis_columns(conn)
     _ensure_practice_item_columns(conn)
     # Seed initial language resources in a separate transaction
     with conn:
         _seed_resources(conn)
     conn.close()
+
+
+def _ensure_diagnosis_columns(conn: sqlite3.Connection) -> None:
+    cols = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(diagnoses)").fetchall()
+    }
+    if "diagnosis_result_json" not in cols:
+        conn.execute(
+            "ALTER TABLE diagnoses ADD COLUMN diagnosis_result_json TEXT NOT NULL DEFAULT '{}'"
+        )
 
 
 def _ensure_practice_item_columns(conn: sqlite3.Connection) -> None:

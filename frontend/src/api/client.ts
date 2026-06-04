@@ -249,6 +249,8 @@ export interface DiagnosisFailedTask {
 
 export interface DiagnosisResult {
   diagnosis_id: string
+  essay_id?: string
+  created_at?: string
   estimated_band: string
   main_problems: DiagnosisProblem[]
   top_sentence_fixes: DiagnosisFix[]
@@ -259,6 +261,15 @@ export interface DiagnosisResult {
   diagnosis_status?: 'complete' | 'partial_failed'
   failed_tasks?: DiagnosisFailedTask[]
   save_error?: string
+}
+
+export interface DiagnosisSummaryItem {
+  diagnosis_id: string
+  essay_id: string
+  estimated_band: string | null
+  created_at: string
+  main_problems: DiagnosisProblem[]
+  next_training_task: string
 }
 
 export const runDiagnosis = (data: {
@@ -281,6 +292,12 @@ export const retryDiagnosis = (data: {
   failed_task_keys: string[]
   previous_result: DiagnosisResult
 }) => request<DiagnosisResult>('/diagnosis/retry', { method: 'POST', body: JSON.stringify(data) })
+
+export const listDiagnosesForEssay = (essayId: string) =>
+  request<{ items: DiagnosisSummaryItem[] }>(`/diagnosis/essay/${essayId}`)
+
+export const getDiagnosis = (diagnosisId: string) =>
+  request<DiagnosisResult>(`/diagnosis/${diagnosisId}`)
 
 // Home summary
 export interface HomeResource {

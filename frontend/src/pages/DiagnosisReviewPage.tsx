@@ -17,6 +17,7 @@ type DiagnosisPayload = {
   prompt: string
   promptImage?: string | null
   content: string
+  diagnosisResult?: DiagnosisResult | null
 }
 
 type FixCategory = 'all' | 'spelling' | 'grammar' | 'expression' | 'logic'
@@ -161,6 +162,11 @@ export default function DiagnosisReviewPage() {
   const applyDiagnosisResult = (data: DiagnosisResult) => {
     setResult(data)
     setResources(makeResourceDrafts(data))
+    if (payload) {
+      try {
+        sessionStorage.setItem(PAYLOAD_KEY, JSON.stringify({ ...payload, diagnosisResult: data }))
+      } catch { /* ignore storage failures */ }
+    }
     const failedCount = data.failed_tasks?.length ?? 0
     setError(failedCount > 0 ? `有 ${failedCount} 个诊断任务失败，可点击重试只重跑失败部分。` : '')
   }
@@ -187,7 +193,11 @@ export default function DiagnosisReviewPage() {
   }
 
   useEffect(() => {
-    runFullDiagnosis()
+    if (payload?.diagnosisResult) {
+      applyDiagnosisResult(payload.diagnosisResult)
+    } else {
+      runFullDiagnosis()
+    }
   }, [payload])
 
   const retryFailedTasks = async () => {

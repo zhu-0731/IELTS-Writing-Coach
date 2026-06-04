@@ -27,6 +27,38 @@ class DiagnosisRetryRequest(DiagnosisRequest):
     previous_result: dict = Field(default_factory=dict)
 
 
+def _json_loads(raw: str | None, fallback):
+    if not raw:
+        return fallback
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return fallback
+
+
+def _result_from_row(row) -> dict:
+    stored = _json_loads(row["diagnosis_result_json"] if "diagnosis_result_json" in row.keys() else None, {})
+    if isinstance(stored, dict) and stored:
+        result = dict(stored)
+    else:
+        result = {
+            "estimated_band": row["estimated_band"] or "",
+            "main_problems": _json_loads(row["main_problems_json"], []),
+            "top_sentence_fixes": _json_loads(row["top_sentence_fixes_json"], []),
+            "phrase_resources": [],
+            "template_misuse": "",
+            "next_training_task": row["next_training_task"] or "",
+            "saved_resource_count": 0,
+            "diagnosis_status": "complete",
+            "failed_tasks": [],
+        }
+    result["diagnosis_id"] = row["diagnosis_id"]
+    result["essay_id"] = row["essay_id"]
+    result["created_at"] = row["created_at"]
+    result.setdefault("saved_resource_count", 0)
+    return result
+
+
 def _get_provider():
     conn = get_conn()
     try:
@@ -61,6 +93,7 @@ def _save_diagnosis_result(
                                main_problems_json = ?,
                                top_sentence_fixes_json = ?,
                                hint_usage_feedback_json = ?,
+                               diagnosis_result_json = ?,
                                next_training_task = ?
                            WHERE diagnosis_id = ?""",
                         (
@@ -68,6 +101,7 @@ def _save_diagnosis_result(
                             json.dumps(result.get("main_problems", []), ensure_ascii=False),
                             json.dumps(result.get("top_sentence_fixes", []), ensure_ascii=False),
                             json.dumps([], ensure_ascii=False),
+                            json.dumps(result, ensure_ascii=False),
                             result.get("next_training_task", ""),
                             diagnosis_id,
                         ),
@@ -78,8 +112,8 @@ def _save_diagnosis_result(
                 """INSERT INTO diagnoses
                    (diagnosis_id, essay_id, estimated_band,
                     main_problems_json, top_sentence_fixes_json,
-                    hint_usage_feedback_json, next_training_task)
-                   VALUES (?,?,?,?,?,?,?)""",
+                    hint_usage_feedback_json, diagnosis_result_json, next_training_task)
+                   VALUES (?,?,?,?,?,?,?,?)""",
                 (
                     diagnosis_id,
                     essay_id,
@@ -87,6 +121,7 @@ def _save_diagnosis_result(
                     json.dumps(result.get("main_problems", []), ensure_ascii=False),
                     json.dumps(result.get("top_sentence_fixes", []), ensure_ascii=False),
                     json.dumps([], ensure_ascii=False),
+                    json.dumps(result, ensure_ascii=False),
                     result.get("next_training_task", ""),
                 ),
             )
@@ -102,6 +137,55 @@ def _try_save_diagnosis_result(**kwargs) -> str:
         message = f"诊断结果保存失败：{exc}"
         print(f"[diagnosis] {message}")
         return message
+
+
+@router.get("/essay/{essay_id}")
+def list_diagnoses_for_essay(essay_id: str):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            """SELECT diagnosis_id, essay_id, estimated_band, main_problems_json,
+                      top_sentence_fixes_json, hint_usage_feedback_json,
+                      diagnosis_result_json, next_training_task, created_at
+               FROM diagnoses
+               WHERE essay_id = ?
+               ORDER BY created_at DESC""",
+            (essay_id,),
+        ).fetchall()
+        return {
+            "items": [
+                {
+                    "diagnosis_id": row["diagnosis_id"],
+                    "essay_id": row["essay_id"],
+                    "estimated_band": row["estimated_band"],
+                    "created_at": row["created_at"],
+                    "main_problems": _json_loads(row["main_problems_json"], []),
+                    "next_training_task": row["next_training_task"],
+                }
+                for row in rows
+            ]
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/{diagnosis_id}")
+def get_diagnosis(diagnosis_id: str):
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            """SELECT diagnosis_id, essay_id, estimated_band, main_problems_json,
+                      top_sentence_fixes_json, hint_usage_feedback_json,
+                      diagnosis_result_json, next_training_task, created_at
+               FROM diagnoses
+               WHERE diagnosis_id = ?""",
+            (diagnosis_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Diagnosis not found")
+        return _result_from_row(row)
+    finally:
+        conn.close()
 
 
 @router.post("/full")
@@ -127,6 +211,7 @@ def full_diagnosis(body: DiagnosisRequest):
 
     diagnosis_id = str(uuid.uuid4())
     essay_id = body.essay_id or f"tmp-{uuid.uuid4()}"
+    result = {**result, "diagnosis_id": diagnosis_id}
     save_error = _try_save_diagnosis_result(
         diagnosis_id=diagnosis_id,
         essay_id=essay_id,
@@ -166,6 +251,7 @@ def retry_diagnosis(body: DiagnosisRetryRequest):
 
     diagnosis_id = body.diagnosis_id or body.previous_result.get("diagnosis_id") or str(uuid.uuid4())
     essay_id = body.essay_id or f"tmp-{uuid.uuid4()}"
+    result = {**result, "diagnosis_id": diagnosis_id}
     save_error = _try_save_diagnosis_result(
         diagnosis_id=diagnosis_id,
         essay_id=essay_id,
