@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { createEssay, updateEssay } from '../api/client'
 import { copy } from '../i18n'
 import PromptPanel from '../components/workspace/PromptPanel'
@@ -41,6 +41,7 @@ function draft<T>(key: string, t?: TaskType): T | undefined {
 
 export default function WorkspacePage() {
   const navigate = useNavigate()
+  const location = useLocation()
   // Lazy initialisers read from sessionStorage — correct on the very first render.
   const [taskType, setTaskType] = useState<TaskType>(
     () => (sessionStorage.getItem('workspace_active_task') as TaskType | null) ?? 'task2'
@@ -67,6 +68,27 @@ export default function WorkspacePage() {
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const leftDrag = useRef({ active: false, startX: 0, startW: 0 })
   const rightDrag = useRef({ active: false, startX: 0, startW: 0 })
+
+  useEffect(() => {
+    const state = location.state as { newDraftAt?: number } | null
+    if (!state?.newDraftAt) return
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    setTaskType('task2')
+    setQuestionType('')
+    setPrompt('')
+    setContent('')
+    setEssayId(null)
+    setPromptImage(null)
+    setElapsed(0)
+    setTimerRunning(false)
+    setSidebarCollapsed(false)
+    setActiveTab('hint')
+    setLeftWidth(320)
+    setRightWidth(340)
+    setSaveStatus('idle')
+    requestAnimationFrame(() => editorRef.current?.focus())
+  }, [location.state])
 
   // Persist to a per-task-type slot so each task's draft is independent.
   useEffect(() => {
