@@ -397,8 +397,23 @@ Rules:
     return {'session_id': session_id, 'total': len(valid), 'mode': mode}
 
 
-def complete_session(conn, session_id: str, score: int) -> None:
+def complete_session(conn, session_id: str, score: int, item_results: list[dict] | None = None) -> None:
     with conn:
+        for item in item_results or []:
+            item_id = (item.get("item_id") or "").strip()
+            if not item_id:
+                continue
+            conn.execute(
+                """UPDATE practice_items
+                   SET user_answer = ?, is_correct = ?
+                   WHERE item_id = ? AND session_id = ?""",
+                (
+                    item.get("user_answer", ""),
+                    1 if item.get("is_correct") else 0,
+                    item_id,
+                    session_id,
+                ),
+            )
         conn.execute(
             """UPDATE practice_sessions
                SET status = 'completed', score = ?, updated_at = datetime('now')

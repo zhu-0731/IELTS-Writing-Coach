@@ -120,13 +120,31 @@ def init_db() -> None:
             answer              TEXT NOT NULL DEFAULT '',
             hint_zh             TEXT NOT NULL DEFAULT '',
             explanation_zh      TEXT NOT NULL DEFAULT '',
+            user_answer         TEXT NOT NULL DEFAULT '',
+            is_correct          INTEGER,
             created_at          TEXT NOT NULL DEFAULT (datetime('now'))
         );
     """)
+    _ensure_practice_item_columns(conn)
     # Seed initial language resources in a separate transaction
     with conn:
         _seed_resources(conn)
     conn.close()
+
+
+def _ensure_practice_item_columns(conn: sqlite3.Connection) -> None:
+    cols = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(practice_items)").fetchall()
+    }
+    if "user_answer" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN user_answer TEXT NOT NULL DEFAULT ''"
+        )
+    if "is_correct" not in cols:
+        conn.execute(
+            "ALTER TABLE practice_items ADD COLUMN is_correct INTEGER"
+        )
 
 
 def _seed_resources(conn: sqlite3.Connection) -> None:

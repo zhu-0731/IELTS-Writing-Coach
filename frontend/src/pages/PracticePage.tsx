@@ -123,6 +123,11 @@ function CategoryBadge({ category }: { category: string }) {
 // ── Progress dots ─────────────────────────────────────────────────────────────
 type ItemResult = 'pending' | 'correct' | 'wrong'
 
+interface PracticeAttempt {
+  item: PracticeItem
+  userAnswer: string
+}
+
 function ProgressDots({
   results,
   current,
@@ -195,6 +200,9 @@ function ResultsScreen({
         <p className={`text-sm font-medium mt-2 ${pct >= 70 ? 'text-ok' : 'text-warn'}`}>
           {pct >= 70 ? c.pctGood : c.pctBad}
         </p>
+        {wrongItems.length > 0 && (
+          <p className="text-xs text-ghost mt-2">{c.recordSaved}</p>
+        )}
       </div>
 
       {/* Wrong items review */}
@@ -259,6 +267,123 @@ function ResultsScreen({
   )
 }
 
+function RecordScreen({
+  session,
+  deleting,
+  onDelete,
+  onRetryWrong,
+}: {
+  session: PracticeSession
+  deleting: boolean
+  onDelete: () => void
+  onRetryWrong: (items: PracticeItem[]) => void
+}) {
+  const navigate = useNavigate()
+  const pct = session.total > 0 ? Math.round((session.score / session.total) * 100) : 0
+  const wrongItems = session.items.filter((item) => item.is_correct === 0)
+  const hasItemRecord = session.items.some((item) => item.is_correct !== null)
+
+  return (
+    <div className="w-full max-w-[760px] mx-auto px-6 py-8 space-y-6">
+      <div className="flex items-start gap-3">
+        <button
+          onClick={() => navigate(-1)}
+          className="text-ghost hover:text-dim transition-colors text-lg leading-none"
+          title={c.back}
+        >
+          ←
+        </button>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base font-semibold text-ink">{c.recordTitle}</h1>
+          <p className="text-xs text-ghost mt-0.5">{c.progress(session.total, session.total)}</p>
+        </div>
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          className="text-xs text-ghost hover:text-danger disabled:opacity-50 transition-colors"
+        >
+          {deleting ? c.deleting : c.delete}
+        </button>
+      </div>
+
+      <div className="bg-surface rounded-panel shadow-panel border border-line p-8 text-center">
+        <div
+          className={`text-5xl font-bold mb-2 ${
+            pct >= 70 ? 'text-ok' : pct >= 50 ? 'text-warn' : 'text-danger'
+          }`}
+        >
+          {pct}%
+        </div>
+        <p className="text-base text-dim">{c.score(session.score, session.total)}</p>
+        {!hasItemRecord && (
+          <p className="text-xs text-ghost mt-2">{c.noAnswerRecord}</p>
+        )}
+      </div>
+
+      {hasItemRecord && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xs font-semibold text-ghost uppercase tracking-wide">{c.reviewTitle}</h2>
+            <button
+              onClick={() => onRetryWrong(wrongItems)}
+              disabled={wrongItems.length === 0}
+              className="text-xs font-medium text-brand hover:text-brand-hover disabled:text-ghost disabled:cursor-not-allowed transition-colors"
+            >
+              {wrongItems.length > 0 ? c.retryWrong : c.noWrongItems}
+            </button>
+          </div>
+
+          {session.items.map((item) => {
+            const correct = item.is_correct === 1
+            const userAnswer = item.user_answer || ''
+            return (
+              <div
+                key={item.item_id}
+                className={`rounded-card border p-4 space-y-2.5 ${
+                  correct ? 'border-ok/20 bg-ok-light/40' : 'border-danger/30 bg-danger-light/50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <CategoryBadge category={item.category} />
+                  <span className={`text-xs font-semibold ${correct ? 'text-ok' : 'text-danger'}`}>
+                    {correct ? c.correct : c.wrong}
+                  </span>
+                </div>
+                <p className="text-xs text-dim leading-relaxed italic">
+                  {item.category === 'dictation' ? item.sentence_original : item.sentence_display}
+                </p>
+                {item.category === 'dictation' && !correct ? (
+                  <DictationDiff user={userAnswer} correct={item.answer} />
+                ) : (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <span>
+                      <span className="text-ghost">{c.yourAnswer}：</span>
+                      <span className={correct ? 'text-ok font-mono' : 'text-danger line-through font-mono'}>
+                        {userAnswer || '（空）'}
+                      </span>
+                    </span>
+                    {!correct && (
+                      <span>
+                        <span className="text-ghost">{c.correctAnswer}：</span>
+                        <span className="text-ok font-medium font-mono ml-1">{item.answer}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+                {item.explanation_zh && (
+                  <p className="text-xs text-dim border-t border-line/70 pt-2 leading-relaxed">
+                    {item.explanation_zh}
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PracticePage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -282,8 +407,10 @@ export default function PracticePage() {
   const [submitted, setSubmitted] = useState(false)
   const [currentCorrect, setCurrentCorrect] = useState(false)
   const [results, setResults] = useState<ItemResult[]>([])
-  const [wrongItems, setWrongItems] = useState<{ item: PracticeItem; userAnswer: string }[]>([])
+  const [userAnswers, setUserAnswers] = useState<string[]>([])
+  const [wrongItems, setWrongItems] = useState<PracticeAttempt[]>([])
   const [showResults, setShowResults] = useState(false)
+  const [retryItems, setRetryItems] = useState<PracticeItem[] | null>(null)
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
 
@@ -319,7 +446,10 @@ export default function PracticePage() {
     getPracticeSession(sessionId)
       .then((data) => {
         setSession(data)
-        setResults(new Array(data.items.length).fill('pending'))
+        setResults(data.items.map((item) => (
+          item.is_correct === null ? 'pending' : item.is_correct ? 'correct' : 'wrong'
+        )))
+        setUserAnswers(data.items.map((item) => item.user_answer || ''))
         setLoading(false)
       })
       .catch(() => {
@@ -340,7 +470,8 @@ export default function PracticePage() {
 
   const handleSubmit = () => {
     if (!session) return
-    const item = session.items[currentIdx]
+    const items = retryItems ?? session.items
+    const item = items[currentIdx]
     const correct = checkAnswer(inputValue, item.answer)
     setCurrentCorrect(correct)
     setSubmitted(true)
@@ -349,6 +480,10 @@ export default function PracticePage() {
     newResults[currentIdx] = correct ? 'correct' : 'wrong'
     setResults(newResults)
 
+    const newAnswers = [...userAnswers]
+    newAnswers[currentIdx] = inputValue
+    setUserAnswers(newAnswers)
+
     if (!correct) {
       setWrongItems((prev) => [...prev, { item, userAnswer: inputValue }])
     }
@@ -356,14 +491,32 @@ export default function PracticePage() {
 
   const handleNext = async () => {
     if (!session) return
+    const items = retryItems ?? session.items
     const nextIdx = currentIdx + 1
 
-    if (nextIdx >= session.items.length) {
+    if (nextIdx >= items.length) {
       const finalScore = results.filter((r) => r === 'correct').length
-      try {
-        await completePracticeSession(session.session_id, finalScore)
-      } catch {
-        // non-fatal
+      if (!retryItems) {
+        const itemResults = session.items.map((item, idx) => ({
+          item_id: item.item_id,
+          user_answer: userAnswers[idx] ?? '',
+          is_correct: results[idx] === 'correct',
+        }))
+        try {
+          await completePracticeSession(session.session_id, finalScore, itemResults)
+          setSession({
+            ...session,
+            status: 'completed',
+            score: finalScore,
+            items: session.items.map((item, idx) => ({
+              ...item,
+              user_answer: userAnswers[idx] ?? '',
+              is_correct: results[idx] === 'correct' ? 1 : 0,
+            })),
+          })
+        } catch {
+          // non-fatal
+        }
       }
       setShowResults(true)
     } else {
@@ -372,6 +525,20 @@ export default function PracticePage() {
       setShowHint(false)
       setSubmitted(false)
     }
+  }
+
+  const startWrongRetry = (items: PracticeItem[]) => {
+    if (items.length === 0) return
+    setRetryItems(items)
+    setCurrentIdx(0)
+    setInputValue('')
+    setShowHint(false)
+    setSubmitted(false)
+    setCurrentCorrect(false)
+    setResults(new Array(items.length).fill('pending'))
+    setUserAnswers(new Array(items.length).fill(''))
+    setWrongItems([])
+    setShowResults(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -446,12 +613,25 @@ export default function PracticePage() {
     )
   }
 
+  if (session.status === 'completed' && !retryItems && !showResults) {
+    return (
+      <RecordScreen
+        session={session}
+        deleting={deleting}
+        onDelete={handleDelete}
+        onRetryWrong={startWrongRetry}
+      />
+    )
+  }
+
+  const activeItems = retryItems ?? session.items
+
   // ── Results ────────────────────────────────────────────────────────────────
   if (showResults) {
     return (
       <ResultsScreen
         score={results.filter((r) => r === 'correct').length}
-        total={session.total}
+        total={activeItems.length}
         wrongItems={wrongItems}
         essayId={session.essay_id}
         mode={session.mode}
@@ -462,10 +642,10 @@ export default function PracticePage() {
   }
 
   // ── Practice ───────────────────────────────────────────────────────────────
-  const item = session.items[currentIdx]
-  const progressPct = (currentIdx / session.total) * 100
+  const item = activeItems[currentIdx]
+  const progressPct = (currentIdx / activeItems.length) * 100
 
-  const title = isDictation ? c.dictationTitle : c.title
+  const title = retryItems ? c.retryWrongTitle : isDictation ? c.dictationTitle : c.title
 
   return (
     <div className="w-full max-w-[680px] mx-auto px-6 py-8">
@@ -480,7 +660,7 @@ export default function PracticePage() {
         </button>
         <div>
           <h1 className="text-base font-semibold text-ink">{title}</h1>
-          <p className="text-xs text-ghost mt-0.5">{c.progress(currentIdx + 1, session.total)}</p>
+          <p className="text-xs text-ghost mt-0.5">{c.progress(currentIdx + 1, activeItems.length)}</p>
         </div>
         <button
           onClick={handleDelete}
@@ -618,7 +798,7 @@ export default function PracticePage() {
               onClick={handleNext}
               className="w-full py-2.5 text-sm font-medium rounded-btn bg-brand text-white hover:bg-brand-hover transition-colors"
             >
-              {currentIdx + 1 < session.total ? c.next : c.viewResult}
+              {currentIdx + 1 < activeItems.length ? c.next : c.viewResult}
             </button>
           </div>
         )}

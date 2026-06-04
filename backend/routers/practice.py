@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from database import get_conn
 from services.practice_service import generate_practice, complete_session, check_answer
@@ -15,6 +15,7 @@ class GenerateRequest(BaseModel):
 
 class CompleteRequest(BaseModel):
     score: int
+    item_results: list[dict] = Field(default_factory=list)
 
 
 class CheckRequest(BaseModel):
@@ -125,7 +126,7 @@ def complete(session_id: str, body: CompleteRequest):
         ).fetchone()
         if not row:
             raise HTTPException(404, "Session not found")
-        complete_session(conn, session_id, body.score)
+        complete_session(conn, session_id, body.score, body.item_results)
         return {"ok": True}
     finally:
         conn.close()

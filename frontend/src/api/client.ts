@@ -338,6 +338,8 @@ export interface PracticeItem {
   answer: string
   hint_zh: string
   explanation_zh: string
+  user_answer: string
+  is_correct: number | null
 }
 
 export interface PracticeSession {
@@ -372,10 +374,14 @@ export const generatePractice = (data: { essay_id: string; mode?: string }) =>
 export const getPracticeSession = (sessionId: string) =>
   request<PracticeSession>(`/practice/session/${sessionId}`)
 
-export const completePracticeSession = (sessionId: string, score: number) =>
+export const completePracticeSession = (
+  sessionId: string,
+  score: number,
+  itemResults: { item_id: string; user_answer: string; is_correct: boolean }[] = [],
+) =>
   request<{ ok: boolean }>(`/practice/session/${sessionId}/complete`, {
     method: 'POST',
-    body: JSON.stringify({ score }),
+    body: JSON.stringify({ score, item_results: itemResults }),
   })
 
 export const deletePracticeSession = (sessionId: string) =>
