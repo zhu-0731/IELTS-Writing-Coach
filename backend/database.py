@@ -99,6 +99,21 @@ def init_db() -> None:
             created_at              TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS feature_settings (
+            feature     TEXT PRIMARY KEY,   -- 'diagnosis' | 'practice'
+            enabled     INTEGER NOT NULL DEFAULT 0,
+            provider    TEXT    NOT NULL DEFAULT 'openai_compatible',
+            model_name  TEXT    NOT NULL DEFAULT '',
+            base_url    TEXT    NOT NULL DEFAULT '',
+            api_key     TEXT    NOT NULL DEFAULT '',
+            supports_vision         INTEGER NOT NULL DEFAULT 0,
+            supports_json_schema    INTEGER NOT NULL DEFAULT 1,
+            supports_tool_calling   INTEGER NOT NULL DEFAULT 1,
+            temperature             REAL    NOT NULL DEFAULT 0.7,
+            max_tokens              INTEGER NOT NULL DEFAULT 2048,
+            updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS practice_sessions (
             session_id  TEXT PRIMARY KEY,
             essay_id    TEXT NOT NULL,

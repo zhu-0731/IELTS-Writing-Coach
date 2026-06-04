@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from database import get_conn
-from services.provider import make_provider_from_db
+from services.provider import make_provider_for_feature
 from services.diagnosis_service import run_diagnosis
 from services.resource_service import extract_and_save
 
@@ -24,14 +24,11 @@ class DiagnosisRequest(BaseModel):
 def _get_provider():
     conn = get_conn()
     try:
-        row = conn.execute("SELECT * FROM settings WHERE id = 1").fetchone()
+        return make_provider_for_feature(conn, "diagnosis")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     finally:
         conn.close()
-    if not row or not row["api_key"]:
-        raise HTTPException(400, "API Key 未配置，请前往设置页填写。")
-    if not row["model_name"]:
-        raise HTTPException(400, "Model Name 未配置，请前往设置页填写。")
-    return make_provider_from_db(row)
 
 
 @router.post("/full")

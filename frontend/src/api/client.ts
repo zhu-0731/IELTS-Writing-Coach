@@ -62,6 +62,42 @@ export const getSettings = () =>
 export const saveSettings = (data: SettingsWrite) =>
   request<SettingsData>('/settings', { method: 'PUT', body: JSON.stringify(data) })
 
+// Per-feature LLM overrides
+export type FeatureKey = 'diagnosis' | 'practice'
+
+export interface FeatureSettings {
+  feature: string
+  enabled: boolean
+  model_name: string
+  base_url: string
+  api_key_masked: string
+  temperature: number
+  max_tokens: number
+  // Effective config after override/fallback resolution
+  effective_source: 'general' | 'feature'
+  effective_model_name: string
+  effective_base_url: string
+  effective_api_key_masked: string
+}
+
+export interface FeatureSettingsWrite {
+  enabled?: boolean
+  model_name?: string
+  base_url?: string
+  api_key?: string
+  temperature?: number
+  max_tokens?: number
+}
+
+export const getFeatureSettings = () =>
+  request<Record<FeatureKey, FeatureSettings>>('/settings/features')
+
+export const saveFeatureSettings = (feature: FeatureKey, data: FeatureSettingsWrite) =>
+  request<FeatureSettings>(`/settings/features/${feature}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+
 // Data reset
 export const resetAllData = () =>
   request<{ ok: boolean }>('/data/reset', { method: 'POST' })
