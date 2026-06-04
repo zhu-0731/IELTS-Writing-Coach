@@ -5,6 +5,7 @@ import {
   completePracticeSession,
   generatePractice,
   deletePracticeSession,
+  appealPracticeAnswer,
   type PracticeItem,
   type PracticeSession,
 } from '../api/client'
@@ -468,6 +469,8 @@ export default function PracticePage() {
   const [wrongItems, setWrongItems] = useState<PracticeAttempt[]>([])
   const [showResults, setShowResults] = useState(false)
   const [retryItems, setRetryItems] = useState<PracticeItem[] | null>(null)
+  const [appealing, setAppealing] = useState(false)
+  const [appealMessage, setAppealMessage] = useState('')
 
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
 
@@ -531,6 +534,7 @@ export default function PracticePage() {
     const item = items[currentIdx]
     const result = evaluateAnswer(inputValue, item)
     setCurrentResult(result)
+    setAppealMessage('')
     setSubmitted(true)
 
     const newResults = [...results]
@@ -578,11 +582,12 @@ export default function PracticePage() {
       setShowResults(true)
     } else {
       setCurrentIdx(nextIdx)
-    setInputValue('')
-    setShowHint(false)
-    setSubmitted(false)
-    setCurrentResult('pending')
-  }
+      setInputValue('')
+      setShowHint(false)
+      setSubmitted(false)
+      setCurrentResult('pending')
+      setAppealMessage('')
+    }
   }
 
   const startWrongRetry = (items: PracticeItem[]) => {
@@ -593,6 +598,7 @@ export default function PracticePage() {
     setShowHint(false)
     setSubmitted(false)
     setCurrentResult('pending')
+    setAppealMessage('')
     setResults(new Array(items.length).fill('pending'))
     setUserAnswers(new Array(items.length).fill(''))
     setWrongItems([])
@@ -604,6 +610,48 @@ export default function PracticePage() {
       e.preventDefault()
       if (!submitted && inputValue.trim()) handleSubmit()
       else if (submitted) handleNext()
+    }
+  }
+
+  const handleAppeal = async () => {
+    if (!session || !submitted || currentResult === 'correct' || appealing) return
+    const items = retryItems ?? session.items
+    const item = items[currentIdx]
+    setAppealing(true)
+    setAppealMessage('')
+    try {
+      const result = await appealPracticeAnswer({
+        item_id: item.item_id,
+        user_answer: inputValue,
+      })
+      if (result.accepted) {
+        const newResults = [...results]
+        newResults[currentIdx] = 'correct'
+        setResults(newResults)
+        setCurrentResult('correct')
+        setWrongItems((prev) => prev.filter((w) => w.item.item_id !== item.item_id))
+        if (result.acceptable_answers.length > 0) {
+          const updatedItem = {
+            ...item,
+            acceptable_answers_json: JSON.stringify(result.acceptable_answers),
+          }
+          if (retryItems) {
+            setRetryItems((prev) => prev?.map((it) => it.item_id === item.item_id ? updatedItem : it) ?? null)
+          } else {
+            setSession({
+              ...session,
+              items: session.items.map((it) => it.item_id === item.item_id ? updatedItem : it),
+            })
+          }
+        }
+        setAppealMessage(result.reason_zh ? `${c.appealAccepted}：${result.reason_zh}` : c.appealAccepted)
+      } else {
+        setAppealMessage(result.reason_zh ? `${c.appealRejected}：${result.reason_zh}` : c.appealRejected)
+      }
+    } catch {
+      setAppealMessage(c.appealError)
+    } finally {
+      setAppealing(false)
     }
   }
 
@@ -857,6 +905,20 @@ export default function PracticePage() {
                     {acceptableAnswers(item).length > 1 && (
                       <p className="text-[11px] text-ghost">
                         {c.acceptableAnswers}：{acceptableAnswers(item).join(' / ')}
+                      </p>
+                    )}
+                    <button
+                      onClick={handleAppeal}
+                      disabled={appealing}
+                      className="mt-1 text-xs font-medium text-brand hover:text-brand-hover disabled:text-ghost transition-colors"
+                    >
+                      {appealing ? c.appealing : c.appeal}
+                    </button>
+                    {appealMessage && (
+                      <p className={`text-xs leading-relaxed ${
+                        appealMessage.startsWith(c.appealAccepted) ? 'text-ok' : 'text-dim'
+                      }`}>
+                        {appealMessage}
                       </p>
                     )}
                   </div>

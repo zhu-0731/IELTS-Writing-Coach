@@ -389,6 +389,19 @@ export const completePracticeSession = (
 export const deletePracticeSession = (sessionId: string) =>
   request<{ ok: boolean }>(`/practice/session/${sessionId}`, { method: 'DELETE' })
 
+export interface PracticeAppealResult {
+  accepted: boolean
+  verdict: string
+  reason_zh: string
+  acceptable_answers: string[]
+}
+
+export const appealPracticeAnswer = (data: { item_id: string; user_answer: string }) =>
+  request<PracticeAppealResult>('/practice/appeal', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+
 export const listPracticeSessions = (limit = 10) =>
   request<PracticeSessionSummary[]>(`/practice/sessions?limit=${limit}`)
 
