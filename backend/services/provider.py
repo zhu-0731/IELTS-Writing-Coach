@@ -48,6 +48,13 @@ class LLMProvider(Protocol):
 
 
 class OpenAICompatibleProvider:
+    RETRYABLE_EXCEPTIONS = (
+        httpx.ConnectError,
+        httpx.ReadError,
+        httpx.RemoteProtocolError,
+        httpx.TimeoutException,
+    )
+
     def __init__(self, base_url: str, api_key: str, model_name: str,
                  temperature: float = 0.7, max_tokens: int = 2048):
         self.base_url = base_url.rstrip("/")
@@ -78,6 +85,51 @@ class OpenAICompatibleProvider:
             exc,
         )
 
+    def _post_with_retries(
+        self,
+        client: httpx.Client,
+        *,
+        call_id: str,
+        context: str,
+        max_tokens: int,
+        payload: dict,
+    ) -> httpx.Response:
+        last_exc: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                resp = client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                )
+                resp.raise_for_status()
+                if attempt > 1:
+                    logger.info(
+                        "[llm] retry recovered | call_id=%s | context=%s | attempt=%s",
+                        call_id,
+                        context,
+                        attempt,
+                    )
+                return resp
+            except self.RETRYABLE_EXCEPTIONS as exc:
+                last_exc = exc
+                logger.warning(
+                    "[llm] transient call failure | call_id=%s | context=%s | attempt=%s | max_tokens=%s | error=%s",
+                    call_id,
+                    context,
+                    attempt,
+                    max_tokens,
+                    exc,
+                )
+                if attempt < 3:
+                    time.sleep(0.8 * attempt)
+                    continue
+                break
+
+        assert last_exc is not None
+        self._log_error_context(call_id=call_id, context=context, max_tokens=max_tokens, exc=last_exc)
+        raise last_exc
+
     def chat(self, messages: list[dict], **kwargs) -> str:
         call_id = uuid.uuid4().hex[:8]
         context = str(kwargs.get("context") or "chat")
@@ -91,12 +143,13 @@ class OpenAICompatibleProvider:
         started = time.perf_counter()
         with httpx.Client(timeout=60) as client:
             try:
-                resp = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self._headers(),
-                    json=payload,
+                resp = self._post_with_retries(
+                    client,
+                    call_id=call_id,
+                    context=context,
+                    max_tokens=max_tokens,
+                    payload=payload,
                 )
-                resp.raise_for_status()
                 content = resp.json()["choices"][0]["message"]["content"]
                 logger.info(
                     "[llm] chat ok | call_id=%s | context=%s | elapsed_ms=%d | content_len=%d",
@@ -107,7 +160,8 @@ class OpenAICompatibleProvider:
                 )
                 return content
             except Exception as exc:
-                self._log_error_context(call_id=call_id, context=context, max_tokens=max_tokens, exc=exc)
+                if not isinstance(exc, self.RETRYABLE_EXCEPTIONS):
+                    self._log_error_context(call_id=call_id, context=context, max_tokens=max_tokens, exc=exc)
                 raise
 
     def chat_json(self, messages: list[dict], schema: dict, **kwargs) -> dict:
@@ -124,14 +178,16 @@ class OpenAICompatibleProvider:
         started = time.perf_counter()
         with httpx.Client(timeout=90) as client:
             try:
-                resp = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self._headers(),
-                    json=payload,
+                resp = self._post_with_retries(
+                    client,
+                    call_id=call_id,
+                    context=context,
+                    max_tokens=max_tokens,
+                    payload=payload,
                 )
-                resp.raise_for_status()
             except Exception as exc:
-                self._log_error_context(call_id=call_id, context=context, max_tokens=max_tokens, exc=exc)
+                if not isinstance(exc, self.RETRYABLE_EXCEPTIONS):
+                    self._log_error_context(call_id=call_id, context=context, max_tokens=max_tokens, exc=exc)
                 raise
             choice = resp.json()["choices"][0]
             raw = (choice.get("message") or {}).get("content", "") or ""

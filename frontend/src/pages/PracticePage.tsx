@@ -15,28 +15,18 @@ const c = copy.practice
 
 // ── Answer checking (mirrors backend logic) ───────────────────────────────────
 function normalize(s: string) {
-  return s.trim().toLowerCase().replace(/[^\w\s'-]/g, '').trim()
-}
-
-function levenshtein(a: string, b: string): number {
-  if (a.length < b.length) [a, b] = [b, a]
-  if (!b.length) return a.length
-  let row = [...Array(b.length + 1).keys()]
-  for (const ac of a) {
-    const nr = [row[0] + 1]
-    for (let j = 0; j < b.length; j++)
-      nr.push(Math.min(nr[j] + 1, row[j + 1] + 1, row[j] + (ac !== b[j] ? 1 : 0)))
-    row = nr
-  }
-  return row[row.length - 1]
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s'-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function checkAnswer(user: string, correct: string): boolean {
   const u = normalize(user)
   const c = normalize(correct)
-  if (u === c) return true
-  if (!c.includes(' ') && !u.includes(' ') && c.length > 3) return levenshtein(u, c) <= 1
-  return false
+  return Boolean(u && c && u === c)
 }
 
 function parseJson<T>(raw: string, fallback: T): T {
@@ -53,10 +43,9 @@ function acceptableAnswers(item: PracticeItem): string[] {
 type ItemResult = 'pending' | 'correct' | 'replace' | 'wrong'
 
 function evaluateAnswer(user: string, item: PracticeItem): ItemResult {
+  if (acceptableAnswers(item).some((answer) => checkAnswer(user, answer))) return 'correct'
   if (item.weak_answer && checkAnswer(user, item.weak_answer)) return 'replace'
-  return acceptableAnswers(item).some((answer) => checkAnswer(user, answer))
-    ? 'correct'
-    : 'wrong'
+  return 'wrong'
 }
 
 // ── Sentence display with inline blank ───────────────────────────────────────
@@ -247,7 +236,7 @@ function ResultsScreen({
               {/* diff */}
               {item.weak_answer && checkAnswer(userAnswer, item.weak_answer) ? (
                 <p className="text-xs text-dim">
-                  {c.replaceHint(item.weak_answer, item.answer)}
+                  {c.replaceHint(userAnswer, item.weak_answer, item.answer)}
                 </p>
               ) : item.category === 'dictation' ? (
                 <DictationDiff user={userAnswer} correct={item.answer} />
@@ -403,7 +392,7 @@ function RecordScreen({
                 </p>
                 {recordResult === 'replace' ? (
                   <p className="text-xs text-dim">
-                    {c.replaceHint(item.weak_answer, item.answer)}
+                    {c.replaceHint(userAnswer, item.weak_answer, item.answer)}
                   </p>
                 ) : item.category === 'dictation' && !correct ? (
                   <DictationDiff user={userAnswer} correct={item.answer} />
@@ -892,7 +881,7 @@ export default function PracticePage() {
                   <div className="mt-1 space-y-1">
                     {currentResult === 'replace' ? (
                       <p className="text-xs text-dim">
-                        {c.replaceHint(item.weak_answer, item.answer)}
+                        {c.replaceHint(inputValue, item.weak_answer, item.answer)}
                       </p>
                     ) : isDictation ? (
                       <DictationDiff user={inputValue} correct={item.answer} />

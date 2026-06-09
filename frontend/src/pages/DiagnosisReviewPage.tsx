@@ -70,6 +70,16 @@ function getPayload(locationState: unknown): DiagnosisPayload | null {
   }
 }
 
+function diagnosisRunKey(payload: DiagnosisPayload): string {
+  return [
+    payload.essayId ?? '',
+    payload.taskType,
+    payload.questionType,
+    payload.prompt,
+    payload.content,
+  ].join('|')
+}
+
 function splitEssay(content: string): TextSegment[][] {
   return content
     .split(/\n\s*\n+/)
@@ -165,6 +175,7 @@ export default function DiagnosisReviewPage() {
   const [resources, setResources] = useState<ResourceDraft[]>([])
   const segmentRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const fixRefs = useRef<Record<number, HTMLButtonElement | null>>({})
+  const autoRunKeyRef = useRef('')
 
   const applyDiagnosisResult = (data: DiagnosisResult) => {
     setResult(data)
@@ -203,9 +214,18 @@ export default function DiagnosisReviewPage() {
   useEffect(() => {
     if (payload?.diagnosisResult) {
       applyDiagnosisResult(payload.diagnosisResult)
-    } else {
-      runFullDiagnosis()
+      return
     }
+    if (!payload?.content?.trim()) return
+
+    const runKey = diagnosisRunKey(payload)
+    if (autoRunKeyRef.current === runKey) return
+
+    const timer = window.setTimeout(() => {
+      autoRunKeyRef.current = runKey
+      runFullDiagnosis()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [payload])
 
   const retryFailedTasks = async () => {

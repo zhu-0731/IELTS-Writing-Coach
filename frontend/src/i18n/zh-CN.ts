@@ -431,7 +431,8 @@ export const copy = {
     correct: '正确！',
     wrong: '答案有误',
     replaceNeeded: '表达需要替换',
-    replaceHint: (weak: string, answer: string) => `你输入的是原始/普通表达「${weak}」。本题希望你练习替换为「${answer}」。`,
+    replaceHint: (user: string, weak: string, answer: string) =>
+      `你的答案：「${user || '（空）'}」。本题希望把原始/普通表达「${weak}」替换为「${answer}」。`,
     acceptableAnswers: '可接受答案',
     appeal: '申诉',
     appealing: '申诉中…',
