@@ -157,6 +157,7 @@ export default function DiagnosisReviewPage() {
   const [error, setError] = useState('')
   const [activeCategory, setActiveCategory] = useState<FixCategory>('all')
   const [selectedFixIndex, setSelectedFixIndex] = useState(0)
+  const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [resources, setResources] = useState<ResourceDraft[]>([])
 
   const applyDiagnosisResult = (data: DiagnosisResult) => {
@@ -319,26 +320,58 @@ export default function DiagnosisReviewPage() {
       )}
 
       {(result?.dimension_scores?.length ?? 0) > 0 && (
-        <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {result?.dimension_scores?.map((item) => (
-            <div key={item.key} className="rounded-card border border-line bg-surface px-3 py-2.5 shadow-card">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-ink truncate">{item.label_zh}</p>
-                  <p className="text-[10px] text-ghost truncate">{item.official_name}</p>
-                </div>
-                <p className="shrink-0 text-base font-semibold text-brand">
-                  {item.band || (item.score == null ? 'N/A' : item.score.toFixed(1))}
-                </p>
-              </div>
-              {item.reason_zh && (
-                <p className="mt-2 pt-2 border-t border-line/70 text-xs text-dim leading-5 line-clamp-2">
-                  {item.reason_zh}
-                </p>
-              )}
+        <section className="shrink-0 rounded-card border border-line bg-surface shadow-card overflow-hidden">
+          <button
+            type="button"
+            aria-expanded={scorePanelOpen}
+            onClick={() => setScorePanelOpen((open) => !open)}
+            className="w-full px-4 py-2.5 flex items-center gap-4 text-left hover:bg-muted/60 transition-colors"
+          >
+            <span className="text-sm font-semibold text-ink shrink-0">四维评分</span>
+            <div className="min-w-0 flex-1 flex items-center gap-2 overflow-x-auto">
+              {result?.dimension_scores?.map((item) => (
+                <span
+                  key={item.key}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-btn bg-muted px-2.5 py-1 text-xs text-dim"
+                >
+                  <span>{item.label_zh}</span>
+                  <span className="font-semibold text-brand">
+                    {item.band || (item.score == null ? 'N/A' : item.score.toFixed(1))}
+                  </span>
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
+            <span className="shrink-0 text-xs font-medium text-brand">
+              {scorePanelOpen ? '收起' : '展开'}
+            </span>
+            <span className="shrink-0 text-ghost text-sm" aria-hidden="true">
+              {scorePanelOpen ? '⌃' : '⌄'}
+            </span>
+          </button>
+
+          {scorePanelOpen && (
+            <div className="border-t border-line px-4 py-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {result?.dimension_scores?.map((item) => (
+                <div key={item.key} className="rounded-card border border-line bg-canvas/40 px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-ink truncate">{item.label_zh}</p>
+                      <p className="text-[10px] text-ghost truncate">{item.official_name}</p>
+                    </div>
+                    <p className="shrink-0 text-base font-semibold text-brand">
+                      {item.band || (item.score == null ? 'N/A' : item.score.toFixed(1))}
+                    </p>
+                  </div>
+                  {item.reason_zh && (
+                    <p className="mt-2 pt-2 border-t border-line/70 text-xs text-dim leading-5">
+                      {item.reason_zh}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {result?.diagnosis_scope_note && (
