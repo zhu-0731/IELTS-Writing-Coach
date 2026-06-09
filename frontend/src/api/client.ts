@@ -247,16 +247,27 @@ export interface DiagnosisFailedTask {
   error: string
 }
 
+export interface DiagnosisDimensionScore {
+  key: string
+  official_name: string
+  label_zh: string
+  score: number | null
+  band: string
+  reason_zh: string
+}
+
 export interface DiagnosisResult {
   diagnosis_id: string
   essay_id?: string
   created_at?: string
   estimated_band: string
+  dimension_scores?: DiagnosisDimensionScore[]
   main_problems: DiagnosisProblem[]
   top_sentence_fixes: DiagnosisFix[]
   phrase_resources?: DiagnosisPhraseResource[]
   template_misuse: string
   next_training_task: string
+  diagnosis_scope_note?: string
   saved_resource_count: number
   diagnosis_status?: 'complete' | 'partial_failed'
   failed_tasks?: DiagnosisFailedTask[]

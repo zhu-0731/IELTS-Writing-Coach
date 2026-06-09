@@ -43,11 +43,13 @@ def _result_from_row(row) -> dict:
     else:
         result = {
             "estimated_band": row["estimated_band"] or "",
+            "dimension_scores": [],
             "main_problems": _json_loads(row["main_problems_json"], []),
             "top_sentence_fixes": _json_loads(row["top_sentence_fixes_json"], []),
             "phrase_resources": [],
             "template_misuse": "",
             "next_training_task": row["next_training_task"] or "",
+            "diagnosis_scope_note": "",
             "saved_resource_count": 0,
             "diagnosis_status": "complete",
             "failed_tasks": [],

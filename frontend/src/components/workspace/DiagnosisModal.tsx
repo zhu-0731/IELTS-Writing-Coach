@@ -123,6 +123,42 @@ export default function DiagnosisModal({
                 </div>
               </div>
 
+              {/* Dimension scores */}
+              {(result.dimension_scores?.length ?? 0) > 0 && (
+                <section>
+                  <h3 className="text-xs font-semibold text-ghost uppercase tracking-wide mb-3">
+                    {c.dimensionScores}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {result.dimension_scores?.map((item) => (
+                      <div key={item.key} className="rounded-card border border-line bg-canvas/40 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-ink">{item.label_zh}</p>
+                            <p className="text-[10px] text-ghost mt-0.5">{item.official_name}</p>
+                          </div>
+                          <p className="shrink-0 text-lg font-semibold text-brand">
+                            {item.band || (item.score == null ? 'N/A' : item.score.toFixed(1))}
+                          </p>
+                        </div>
+                        {item.reason_zh && (
+                          <div className="mt-2 pt-2 border-t border-line/70">
+                            <p className="text-[10px] text-ghost font-medium">{c.scoreReason}</p>
+                            <p className="text-xs text-dim mt-0.5 leading-relaxed">{item.reason_zh}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {result.diagnosis_scope_note && (
+                <section className="bg-muted rounded-card p-3 border border-line">
+                  <p className="text-xs text-dim leading-relaxed">{result.diagnosis_scope_note}</p>
+                </section>
+              )}
+
               {/* Main problems */}
               {result.main_problems.length > 0 && (
                 <section>

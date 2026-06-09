@@ -1,11 +1,52 @@
 import re
 from copy import deepcopy
+from math import floor
 from typing import Any
 
 from services.provider import LLMProvider
 
 
 TASK_REVIEW = "review"
+MAX_REVIEW_CHARS = 9000
+MAX_PARAGRAPH_CHARS = 3500
+MAX_PARAGRAPH_TASKS = 8
+
+COMMON_DIMENSIONS = [
+    {
+        "key": "coherence_cohesion",
+        "official_name": "Coherence and Cohesion",
+        "label_zh": "结构衔接",
+    },
+    {
+        "key": "lexical_resource",
+        "official_name": "Lexical Resource",
+        "label_zh": "词汇表达",
+    },
+    {
+        "key": "grammar",
+        "official_name": "Grammatical Range and Accuracy",
+        "label_zh": "语法准确性",
+    },
+]
+
+TASK_DIMENSIONS = {
+    "task1": [
+        {
+            "key": "task_achievement",
+            "official_name": "Task Achievement",
+            "label_zh": "任务完成度",
+        },
+        *COMMON_DIMENSIONS,
+    ],
+    "task2": [
+        {
+            "key": "task_response",
+            "official_name": "Task Response",
+            "label_zh": "任务回应",
+        },
+        *COMMON_DIMENSIONS,
+    ],
+}
 
 
 def _task_label(task_type: str) -> str:
@@ -35,11 +76,13 @@ def split_sentences(paragraph: str) -> list[str]:
 def _empty_result() -> dict:
     return {
         "estimated_band": "N/A",
+        "dimension_scores": [],
         "main_problems": [],
         "top_sentence_fixes": [],
         "phrase_resources": [],
         "template_misuse": "",
         "next_training_task": "",
+        "diagnosis_scope_note": "",
         "diagnosis_status": "complete",
         "failed_tasks": [],
     }
@@ -55,6 +98,98 @@ def _system_prompt() -> str:
 
 def _short_error(exc: Exception) -> str:
     return str(exc)[:500] or exc.__class__.__name__
+
+
+def _clip_text(text: str, max_chars: int) -> tuple[str, bool]:
+    if len(text) <= max_chars:
+        return text, False
+    return (
+        text[:max_chars].rstrip()
+        + "\n\n[内容过长，后文已省略。本次诊断优先依据前文判断。]",
+        True,
+    )
+
+
+def _dimension_defs(task_type: str) -> list[dict]:
+    return TASK_DIMENSIONS["task1" if task_type == "task1" else "task2"]
+
+
+def _parse_band_score(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        score = float(value)
+    else:
+        match = re.search(r"\d+(?:\.\d+)?", str(value))
+        if not match:
+            return None
+        score = float(match.group(0))
+    if score < 0 or score > 9:
+        return None
+    return floor(score * 2 + 0.5) / 2
+
+
+def _format_band(score: float | None) -> str:
+    if score is None:
+        return "N/A"
+    return f"{score:.1f}"
+
+
+def _normalize_dimension_scores(raw_scores: Any, task_type: str) -> list[dict]:
+    definitions = _dimension_defs(task_type)
+    if isinstance(raw_scores, dict):
+        raw_items = [
+            {**value, "key": value.get("key", key)}
+            if isinstance(value, dict)
+            else {"key": key, "score": value}
+            for key, value in raw_scores.items()
+        ]
+    elif isinstance(raw_scores, list):
+        raw_items = [item for item in raw_scores if isinstance(item, dict)]
+    else:
+        raw_items = []
+
+    def matches(item: dict, definition: dict) -> bool:
+        values = {
+            str(item.get("key") or "").strip().lower(),
+            str(item.get("official_name") or "").strip().lower(),
+            str(item.get("criterion") or "").strip().lower(),
+            str(item.get("label_zh") or item.get("label") or "").strip().lower(),
+        }
+        return bool({
+            definition["key"].lower(),
+            definition["official_name"].lower(),
+            definition["label_zh"].lower(),
+        } & values)
+
+    normalized: list[dict] = []
+    for definition in definitions:
+        source = next((item for item in raw_items if matches(item, definition)), {})
+        score_value = source.get("score") if "score" in source else source.get("band")
+        score = _parse_band_score(score_value)
+        normalized.append({
+            **definition,
+            "score": score,
+            "band": _format_band(score),
+            "reason_zh": str(
+                source.get("reason_zh")
+                or source.get("reason")
+                or source.get("explanation")
+                or ""
+            ).strip(),
+        })
+    return normalized
+
+
+def _aggregate_dimension_band(dimension_scores: list[dict]) -> str:
+    scores = [
+        item["score"]
+        for item in dimension_scores
+        if isinstance(item.get("score"), (int, float))
+    ]
+    if len(scores) < 4:
+        return "N/A"
+    return _format_band(floor((sum(scores) / len(scores)) * 2 + 0.5) / 2)
 
 
 def _normalize_problem(problem: dict) -> dict:
@@ -140,6 +275,15 @@ def _run_review_task(
     question_type: str,
     image_base64: str | None,
 ) -> dict:
+    review_content, was_clipped = _clip_text(essay_content, MAX_REVIEW_CHARS)
+    dimension_json = ",\n    ".join(
+        (
+            f'{{"key": "{item["key"]}", "label_zh": "{item["label_zh"]}", '
+            f'"official_name": "{item["official_name"]}", "score": "如 6.0 / 6.5 / 7.0", '
+            f'"reason_zh": "中文，1句话，说明该维度为什么是这个分数"}}'
+        )
+        for item in _dimension_defs(task_type)
+    )
     user = f"""请只完成“审题与总体诊断”，输出要短，避免长篇改写。
 
 题型：{_task_label(task_type)}
@@ -148,14 +292,16 @@ def _run_review_task(
 题目：{prompt or "（未提供）"}
 
 作文全文：
-{essay_content}
+{review_content}
 
 返回 JSON：
 {{
-  "estimated_band": "如 6.0 / 6.5 / 7.0+ / N/A",
+  "dimension_scores": [
+    {dimension_json}
+  ],
   "main_problems": [
     {{
-      "category": "Task Achievement / Coherence / Vocabulary / Grammar 之一",
+      "category": "任务回应/完成度 / 结构衔接 / 词汇表达 / 语法准确性 之一",
       "issue": "中文，1句话",
       "severity": "high 或 medium"
     }}
@@ -166,6 +312,8 @@ def _run_review_task(
 
 要求：
 - 不要逐句改写。
+- 必须分别给四个维度分数，score 只能是 0-9 之间的整数或 0.5 分档。
+- 不要直接生成总分；总分由系统按四个维度平均后计算。
 - main_problems 最多 3 条。
 - 重点判断是否审题准确、立场是否回应题目、是否有模板套用。
 """
@@ -187,11 +335,20 @@ def _run_review_task(
         temperature=0.25,
         max_tokens=900,
     )
+    dimension_scores = _normalize_dimension_scores(result.get("dimension_scores"), task_type)
+    estimated_band = _aggregate_dimension_band(dimension_scores)
+    if estimated_band == "N/A":
+        estimated_band = str(result.get("estimated_band") or "N/A").strip()
     return {
-        "estimated_band": str(result.get("estimated_band") or "N/A").strip(),
+        "estimated_band": estimated_band,
+        "dimension_scores": dimension_scores,
         "main_problems": [_normalize_problem(p) for p in result.get("main_problems", [])][:3],
         "template_misuse": str(result.get("template_misuse") or "").strip(),
         "next_training_task": str(result.get("next_training_task") or "").strip(),
+        "diagnosis_scope_note": (
+            "作文内容较长，总体评分已优先参考前文；建议按雅思标准长度提交以获得更稳定诊断。"
+            if was_clipped else ""
+        ),
     }
 
 
@@ -205,6 +362,7 @@ def _run_paragraph_task(
     task_type: str,
     question_type: str,
 ) -> dict:
+    paragraph, _ = _clip_text(paragraph, MAX_PARAGRAPH_CHARS)
     indexed_sentences = "\n".join(
         f"S{idx}: {sentence}" for idx, sentence in enumerate(sentences)
     )
@@ -279,7 +437,10 @@ def _run_paragraph_task(
 
 
 def _all_task_keys(paragraph_count: int) -> list[str]:
-    return [TASK_REVIEW] + [f"paragraph:{idx}" for idx in range(paragraph_count)]
+    return [TASK_REVIEW] + [
+        f"paragraph:{idx}"
+        for idx in range(min(paragraph_count, MAX_PARAGRAPH_TASKS))
+    ]
 
 
 def _failed_task(key: str, label: str, exc: Exception) -> dict:
@@ -315,11 +476,13 @@ def run_diagnosis(
 
     result = deepcopy(previous_result) if previous_result else _empty_result()
     result.setdefault("main_problems", [])
+    result.setdefault("dimension_scores", [])
     result.setdefault("top_sentence_fixes", [])
     result.setdefault("phrase_resources", [])
     result.setdefault("template_misuse", "")
     result.setdefault("next_training_task", "")
     result.setdefault("estimated_band", "N/A")
+    result.setdefault("diagnosis_scope_note", "")
 
     previous_failed = result.get("failed_tasks") or []
     current_failed: list[dict] = []
@@ -351,7 +514,13 @@ def run_diagnosis(
             if fix.get("paragraph_index") not in retried_paragraphs
         ]
 
-    for paragraph_index, paragraph in enumerate(paragraphs):
+    if len(paragraphs) > MAX_PARAGRAPH_TASKS:
+        result["diagnosis_scope_note"] = (
+            result.get("diagnosis_scope_note")
+            or f"作文段落较多，本次逐段修改优先诊断前 {MAX_PARAGRAPH_TASKS} 段。"
+        )
+
+    for paragraph_index, paragraph in enumerate(paragraphs[:MAX_PARAGRAPH_TASKS]):
         key = f"paragraph:{paragraph_index}"
         if key not in requested_keys:
             continue

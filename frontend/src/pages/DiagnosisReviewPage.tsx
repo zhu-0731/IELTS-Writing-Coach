@@ -318,6 +318,35 @@ export default function DiagnosisReviewPage() {
         </div>
       )}
 
+      {(result?.dimension_scores?.length ?? 0) > 0 && (
+        <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {result?.dimension_scores?.map((item) => (
+            <div key={item.key} className="rounded-card border border-line bg-surface px-3 py-2.5 shadow-card">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-ink truncate">{item.label_zh}</p>
+                  <p className="text-[10px] text-ghost truncate">{item.official_name}</p>
+                </div>
+                <p className="shrink-0 text-base font-semibold text-brand">
+                  {item.band || (item.score == null ? 'N/A' : item.score.toFixed(1))}
+                </p>
+              </div>
+              {item.reason_zh && (
+                <p className="mt-2 pt-2 border-t border-line/70 text-xs text-dim leading-5 line-clamp-2">
+                  {item.reason_zh}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result?.diagnosis_scope_note && (
+        <div className="shrink-0 px-4 py-2.5 rounded-card bg-muted border border-line text-xs text-dim">
+          {result.diagnosis_scope_note}
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 grid grid-cols-[minmax(280px,0.95fr)_minmax(360px,1.25fr)_minmax(300px,0.9fr)] gap-4 overflow-hidden">
         <section className="bg-surface border border-line rounded-card shadow-card flex flex-col min-h-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-line">
