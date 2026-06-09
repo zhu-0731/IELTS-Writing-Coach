@@ -319,7 +319,8 @@ def _run_review_task(
         ],
         schema={},
         temperature=0.25,
-        max_tokens=900,
+        max_tokens=2400,
+        context="diagnosis.review",
     )
     dimension_scores = _normalize_dimension_scores(result.get("dimension_scores"), task_type)
     estimated_band = _aggregate_dimension_band(dimension_scores)
@@ -402,7 +403,8 @@ def _run_paragraph_task(
         ],
         schema={},
         temperature=0.3,
-        max_tokens=1400,
+        max_tokens=3600,
+        context=f"diagnosis.paragraph.{paragraph_index}",
     )
     return {
         "fixes": [

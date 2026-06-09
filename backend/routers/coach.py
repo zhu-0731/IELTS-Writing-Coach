@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -7,6 +9,7 @@ from services.idea_service import generate_idea
 from services.expression_service import generate_expression
 
 router = APIRouter(prefix="/api/coach", tags=["coach"])
+logger = logging.getLogger("ielts.api.coach")
 
 
 class IdeaRequest(BaseModel):
@@ -46,6 +49,7 @@ def idea_coach(body: IdeaRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("[coach.idea] AI call failed")
         raise HTTPException(500, f"AI 调用失败：{e}")
 
 
@@ -59,4 +63,5 @@ def expression_coach(body: ExpressionRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("[coach.expression] AI call failed")
         raise HTTPException(500, f"AI 调用失败：{e}")

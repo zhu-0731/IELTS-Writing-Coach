@@ -48,7 +48,8 @@ def generate_expression(
         ],
         schema={},
         temperature=0.5,
-        max_tokens=700,
+        max_tokens=1600,
+        context="coach.expression",
     )
 
     for key in ("low_risk", "recommended", "advanced"):

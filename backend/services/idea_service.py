@@ -51,7 +51,8 @@ def generate_idea(
         ],
         schema={},
         temperature=0.7,
-        max_tokens=1200,
+        max_tokens=1800,
+        context="coach.idea",
     )
 
     if "stances" not in result or "task_breakdown" not in result:

@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 import uuid
 
@@ -10,6 +11,7 @@ from services.provider import make_provider_for_feature
 from services.diagnosis_service import run_diagnosis
 
 router = APIRouter(prefix="/api/diagnosis", tags=["diagnosis"])
+logger = logging.getLogger("ielts.api.diagnosis")
 
 
 class DiagnosisRequest(BaseModel):
@@ -226,6 +228,7 @@ def full_diagnosis(body: DiagnosisRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("[diagnosis.full] AI diagnosis failed")
         raise HTTPException(500, f"AI 诊断失败：{e}")
 
     diagnosis_id = str(uuid.uuid4())
@@ -266,6 +269,7 @@ def retry_diagnosis(body: DiagnosisRetryRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("[diagnosis.retry] AI diagnosis retry failed")
         raise HTTPException(500, f"AI 诊断重试失败：{e}")
 
     diagnosis_id = body.diagnosis_id or body.previous_result.get("diagnosis_id") or str(uuid.uuid4())

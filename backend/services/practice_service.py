@@ -430,6 +430,7 @@ Rules:
             # token budget on chain-of-thought before emitting the answer, so
             # a small ceiling truncates the JSON. Give generous headroom.
             max_tokens=6000,
+            context=f"practice.generate.{mode}",
         )
     except Exception as e:
         fallback_items = _fallback_practice_items(mode, fixes, resources, n_items)

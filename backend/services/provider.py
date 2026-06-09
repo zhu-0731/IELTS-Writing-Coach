@@ -1,7 +1,12 @@
 from typing import Protocol, Any
-import sys
 import httpx
 import json
+import logging
+import time
+import uuid
+
+
+logger = logging.getLogger("ielts.llm")
 
 
 def _parse_json_loose(raw: str) -> dict:
@@ -57,48 +62,103 @@ class OpenAICompatibleProvider:
             "Content-Type": "application/json",
         }
 
+    def _effective_max_tokens(self, requested: int | None) -> int:
+        configured = int(self.max_tokens or 0)
+        requested = int(requested or 0)
+        return max(configured, requested, 1)
+
+    def _log_error_context(self, *, call_id: str, context: str, max_tokens: int, exc: Exception) -> None:
+        logger.exception(
+            "[llm] call failed | call_id=%s | context=%s | model=%s | base_url=%s | max_tokens=%s | error=%s",
+            call_id,
+            context,
+            self.model_name,
+            self.base_url,
+            max_tokens,
+            exc,
+        )
+
     def chat(self, messages: list[dict], **kwargs) -> str:
+        call_id = uuid.uuid4().hex[:8]
+        context = str(kwargs.get("context") or "chat")
+        max_tokens = self._effective_max_tokens(kwargs.get("max_tokens"))
         payload = {
             "model": self.model_name,
             "messages": messages,
             "temperature": kwargs.get("temperature", self.temperature),
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+            "max_tokens": max_tokens,
         }
+        started = time.perf_counter()
         with httpx.Client(timeout=60) as client:
-            resp = client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers(),
-                json=payload,
-            )
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            try:
+                resp = client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                )
+                resp.raise_for_status()
+                content = resp.json()["choices"][0]["message"]["content"]
+                logger.info(
+                    "[llm] chat ok | call_id=%s | context=%s | elapsed_ms=%d | content_len=%d",
+                    call_id,
+                    context,
+                    int((time.perf_counter() - started) * 1000),
+                    len(content or ""),
+                )
+                return content
+            except Exception as exc:
+                self._log_error_context(call_id=call_id, context=context, max_tokens=max_tokens, exc=exc)
+                raise
 
     def chat_json(self, messages: list[dict], schema: dict, **kwargs) -> dict:
+        call_id = uuid.uuid4().hex[:8]
+        context = str(kwargs.get("context") or "chat_json")
+        max_tokens = self._effective_max_tokens(kwargs.get("max_tokens"))
         payload = {
             "model": self.model_name,
             "messages": messages,
             "temperature": kwargs.get("temperature", self.temperature),
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+            "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
         }
+        started = time.perf_counter()
         with httpx.Client(timeout=90) as client:
-            resp = client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers(),
-                json=payload,
-            )
-            resp.raise_for_status()
+            try:
+                resp = client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                )
+                resp.raise_for_status()
+            except Exception as exc:
+                self._log_error_context(call_id=call_id, context=context, max_tokens=max_tokens, exc=exc)
+                raise
             choice = resp.json()["choices"][0]
             raw = (choice.get("message") or {}).get("content", "") or ""
             finish = choice.get("finish_reason")
             try:
-                return _parse_json_loose(raw)
+                parsed = _parse_json_loose(raw)
+                logger.info(
+                    "[llm] json ok | call_id=%s | context=%s | finish_reason=%s | elapsed_ms=%d | content_len=%d",
+                    call_id,
+                    context,
+                    finish,
+                    int((time.perf_counter() - started) * 1000),
+                    len(raw),
+                )
+                return parsed
             except ValueError:
                 snippet = raw[:600].replace("\n", "\\n")
-                print(
-                    f"[chat_json] JSON parse failed | finish_reason={finish} "
-                    f"| content_len={len(raw)} | snippet={snippet!r}",
-                    file=sys.stderr,
+                logger.error(
+                    "[llm] JSON parse failed | call_id=%s | context=%s | model=%s | finish_reason=%s "
+                    "| max_tokens=%s | content_len=%d | snippet=%r",
+                    call_id,
+                    context,
+                    self.model_name,
+                    finish,
+                    max_tokens,
+                    len(raw),
+                    snippet,
                 )
                 if finish == "length":
                     raise ValueError(
