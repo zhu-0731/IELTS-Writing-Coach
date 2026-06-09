@@ -7,6 +7,8 @@ from services.provider import LLMProvider
 
 
 TASK_REVIEW = "review"
+CET6_WRITING = "cet6_writing"
+CET6_TRANSLATION = "cet6_translation"
 
 COMMON_DIMENSIONS = [
     {
@@ -43,16 +45,76 @@ TASK_DIMENSIONS = {
         },
         *COMMON_DIMENSIONS,
     ],
+    CET6_WRITING: [
+        {
+            "key": "content_relevance",
+            "official_name": "Content Relevance and Completeness",
+            "label_zh": "内容切题完整",
+        },
+        {
+            "key": "organization",
+            "official_name": "Organization and Coherence",
+            "label_zh": "结构连贯",
+        },
+        {
+            "key": "language_accuracy",
+            "official_name": "Language Accuracy",
+            "label_zh": "语言准确",
+        },
+        {
+            "key": "expression_quality",
+            "official_name": "Expression Quality",
+            "label_zh": "表达质量",
+        },
+    ],
+    CET6_TRANSLATION: [
+        {
+            "key": "meaning_transfer",
+            "official_name": "Meaning Transfer",
+            "label_zh": "原意传达",
+        },
+        {
+            "key": "information_completeness",
+            "official_name": "Information Completeness",
+            "label_zh": "信息完整",
+        },
+        {
+            "key": "language_accuracy",
+            "official_name": "Language Accuracy",
+            "label_zh": "语言准确",
+        },
+        {
+            "key": "fluency",
+            "official_name": "Fluency and Naturalness",
+            "label_zh": "译文流畅",
+        },
+    ],
 }
 
 
-def _task_label(task_type: str) -> str:
+def _exam_mode(task_type: str, question_type: str) -> str:
+    if task_type == "task2" and question_type in (CET6_WRITING, CET6_TRANSLATION):
+        return question_type
+    return "task1" if task_type == "task1" else "task2"
+
+
+def _task_label(task_type: str, question_type: str = "") -> str:
+    mode = _exam_mode(task_type, question_type)
+    if mode == CET6_WRITING:
+        return "大学英语六级写作（CET-6 Writing，短文写作）"
+    if mode == CET6_TRANSLATION:
+        return "大学英语六级翻译（CET-6 Translation，段落汉译英）"
     if task_type == "task1":
         return "Task 1 小作文（图表 / 流程 / 地图描述）"
     return "Task 2 大作文（议论文）"
 
 
-def _min_words(task_type: str) -> int:
+def _min_words(task_type: str, question_type: str = "") -> int:
+    mode = _exam_mode(task_type, question_type)
+    if mode == CET6_WRITING:
+        return 150
+    if mode == CET6_TRANSLATION:
+        return 0
     return 150 if task_type == "task1" else 250
 
 
@@ -87,7 +149,7 @@ def _empty_result() -> dict:
 
 def _system_prompt() -> str:
     return (
-        "You are an expert IELTS examiner and writing coach. "
+        "You are an expert English exam examiner and writing coach. "
         "Return valid JSON only. Write Chinese for explanations, but keep original "
         "student text and suggested replacement text in English. Be concise."
     )
@@ -97,11 +159,16 @@ def _short_error(exc: Exception) -> str:
     return str(exc)[:500] or exc.__class__.__name__
 
 
-def _dimension_defs(task_type: str) -> list[dict]:
-    return TASK_DIMENSIONS["task1" if task_type == "task1" else "task2"]
+def _dimension_defs(task_type: str, question_type: str = "") -> list[dict]:
+    return TASK_DIMENSIONS[_exam_mode(task_type, question_type)]
 
 
-def _parse_band_score(value: Any) -> float | None:
+def _score_scale(task_type: str, question_type: str = "") -> float:
+    mode = _exam_mode(task_type, question_type)
+    return 15.0 if mode in (CET6_WRITING, CET6_TRANSLATION) else 9.0
+
+
+def _parse_score(value: Any, max_score: float) -> float | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -111,19 +178,21 @@ def _parse_band_score(value: Any) -> float | None:
         if not match:
             return None
         score = float(match.group(0))
-    if score < 0 or score > 9:
+    if score < 0 or score > max_score:
         return None
     return floor(score * 2 + 0.5) / 2
 
 
-def _format_band(score: float | None) -> str:
+def _format_score(score: float | None, max_score: float) -> str:
     if score is None:
         return "N/A"
-    return f"{score:.1f}"
+    formatted = f"{score:.1f}"
+    return f"{formatted}/15" if max_score == 15.0 else formatted
 
 
-def _normalize_dimension_scores(raw_scores: Any, task_type: str) -> list[dict]:
-    definitions = _dimension_defs(task_type)
+def _normalize_dimension_scores(raw_scores: Any, task_type: str, question_type: str = "") -> list[dict]:
+    definitions = _dimension_defs(task_type, question_type)
+    max_score = _score_scale(task_type, question_type)
     if isinstance(raw_scores, dict):
         raw_items = [
             {**value, "key": value.get("key", key)}
@@ -153,11 +222,11 @@ def _normalize_dimension_scores(raw_scores: Any, task_type: str) -> list[dict]:
     for definition in definitions:
         source = next((item for item in raw_items if matches(item, definition)), {})
         score_value = source.get("score") if "score" in source else source.get("band")
-        score = _parse_band_score(score_value)
+        score = _parse_score(score_value, max_score)
         normalized.append({
             **definition,
             "score": score,
-            "band": _format_band(score),
+            "band": _format_score(score, max_score),
             "reason_zh": str(
                 source.get("reason_zh")
                 or source.get("reason")
@@ -168,7 +237,7 @@ def _normalize_dimension_scores(raw_scores: Any, task_type: str) -> list[dict]:
     return normalized
 
 
-def _aggregate_dimension_band(dimension_scores: list[dict]) -> str:
+def _aggregate_dimension_band(dimension_scores: list[dict], task_type: str, question_type: str = "") -> str:
     scores = [
         item["score"]
         for item in dimension_scores
@@ -176,7 +245,24 @@ def _aggregate_dimension_band(dimension_scores: list[dict]) -> str:
     ]
     if len(scores) < 4:
         return "N/A"
-    return _format_band(floor((sum(scores) / len(scores)) * 2 + 0.5) / 2)
+    max_score = _score_scale(task_type, question_type)
+    return _format_score(floor((sum(scores) / len(scores)) * 2 + 0.5) / 2, max_score)
+
+
+def _review_focus(task_type: str, question_type: str) -> str:
+    mode = _exam_mode(task_type, question_type)
+    if mode == CET6_WRITING:
+        return (
+            "按大学英语六级写作 15 分制评分。重点判断是否切题、内容是否完整、结构是否清楚、"
+            "语言是否准确自然。六级写作采用总体印象评分，分数应落在 0-15 分。"
+        )
+    if mode == CET6_TRANSLATION:
+        return (
+            "按大学英语六级段落汉译英 15 分制评分。重点判断是否准确表达中文原文意思、"
+            "信息是否完整、用词和语法是否准确、译文是否通顺连贯。六级翻译采用总体印象评分，"
+            "分数应落在 0-15 分。"
+        )
+    return "重点判断是否审题准确、立场是否回应题目、是否有模板套用。"
 
 
 def _normalize_problem(problem: dict) -> dict:
@@ -262,19 +348,26 @@ def _run_review_task(
     question_type: str,
     image_base64: str | None,
 ) -> dict:
+    min_words = _min_words(task_type, question_type)
+    min_requirement = (
+        f"最低字数：{min_words} 词"
+        if min_words > 0
+        else "长度要求：按题目中文段落完整翻译，不按作文最低词数要求"
+    )
+    score_scale = _score_scale(task_type, question_type)
     dimension_json = ",\n    ".join(
         (
             f'{{"key": "{item["key"]}", "label_zh": "{item["label_zh"]}", '
-            f'"official_name": "{item["official_name"]}", "score": "如 6.0 / 6.5 / 7.0", '
+            f'"official_name": "{item["official_name"]}", "score": "如 {"12.0 / 13.5 / 15.0" if score_scale == 15.0 else "6.0 / 6.5 / 7.0"}", '
             f'"reason_zh": "中文，1句话，说明该维度为什么是这个分数"}}'
         )
-        for item in _dimension_defs(task_type)
+        for item in _dimension_defs(task_type, question_type)
     )
     user = f"""请只完成“审题与总体诊断”，输出要短，避免长篇改写。
 
-题型：{_task_label(task_type)}
+题型：{_task_label(task_type, question_type)}
 问题类型：{question_type or "通用"}
-最低字数：{_min_words(task_type)} 词
+{min_requirement}
 题目：{prompt or "（未提供）"}
 
 作文全文：
@@ -287,7 +380,7 @@ def _run_review_task(
   ],
   "main_problems": [
     {{
-      "category": "任务回应/完成度 / 结构衔接 / 词汇表达 / 语法准确性 之一",
+      "category": "从本题评分维度中选择一个中文维度名",
       "issue": "中文，1句话",
       "severity": "high 或 medium"
     }}
@@ -298,10 +391,10 @@ def _run_review_task(
 
 要求：
 - 不要逐句改写。
-- 必须分别给四个维度分数，score 只能是 0-9 之间的整数或 0.5 分档。
+- 必须分别给四个维度分数，score 只能是 0-{score_scale:g} 之间的整数或 0.5 分档。
 - 不要直接生成总分；总分由系统按四个维度平均后计算。
 - main_problems 最多 3 条。
-- 重点判断是否审题准确、立场是否回应题目、是否有模板套用。
+- {_review_focus(task_type, question_type)}
 """
     if image_base64:
         b64 = image_base64.split(",", 1)[-1]
@@ -322,8 +415,8 @@ def _run_review_task(
         max_tokens=2400,
         context="diagnosis.review",
     )
-    dimension_scores = _normalize_dimension_scores(result.get("dimension_scores"), task_type)
-    estimated_band = _aggregate_dimension_band(dimension_scores)
+    dimension_scores = _normalize_dimension_scores(result.get("dimension_scores"), task_type, question_type)
+    estimated_band = _aggregate_dimension_band(dimension_scores, task_type, question_type)
     if estimated_band == "N/A":
         estimated_band = str(result.get("estimated_band") or "N/A").strip()
     return {
@@ -351,7 +444,7 @@ def _run_paragraph_task(
     )
     user = f"""请只诊断下面这一段，不要输出全文诊断。重点检查逻辑、语法、拼写和表达。
 
-题型：{_task_label(task_type)}
+题型：{_task_label(task_type, question_type)}
 问题类型：{question_type or "通用"}
 题目：{prompt or "（未提供）"}
 段落编号：P{paragraph_index}

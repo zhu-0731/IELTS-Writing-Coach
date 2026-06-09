@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from database import get_conn
+from services.feature_flags import ensure_question_type_enabled
 from services.provider import make_provider_for_feature
 from services.diagnosis_service import run_diagnosis
 
@@ -213,6 +214,10 @@ def delete_diagnosis(diagnosis_id: str):
 def full_diagnosis(body: DiagnosisRequest):
     if not body.content.strip():
         raise HTTPException(400, "作文内容为空，无法诊断。")
+    try:
+        ensure_question_type_enabled(body.question_type)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
     provider = _get_provider()
 
@@ -252,6 +257,10 @@ def full_diagnosis(body: DiagnosisRequest):
 def retry_diagnosis(body: DiagnosisRetryRequest):
     if not body.content.strip():
         raise HTTPException(400, "作文内容为空，无法诊断。")
+    try:
+        ensure_question_type_enabled(body.question_type)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
     provider = _get_provider()
 
