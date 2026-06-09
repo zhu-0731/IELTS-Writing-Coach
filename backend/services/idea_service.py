@@ -7,11 +7,14 @@ def generate_idea(
     question_type: str,
     prompt: str,
 ) -> dict:
-    task_label = (
-        "Task 1 小作文（描述图表、流程或地图）"
-        if task_type == "task1"
-        else "Task 2 大作文（议论文）"
-    )
+    if task_type == "task1":
+        task_label = "Task 1 小作文（描述图表、流程或地图）"
+    elif question_type == "cet6_writing":
+        task_label = "大学英语六级写作（短文写作）"
+    elif question_type == "cet6_translation":
+        task_label = "大学英语六级翻译（段落汉译英）"
+    else:
+        task_label = "Task 2 大作文（议论文）"
     question_label = question_type or "通用"
 
     system = (
@@ -42,7 +45,9 @@ def generate_idea(
   "usage_note": "考试中使用此框架的 1-2 句简短建议"
 }}
 
-提供 2-3 个不同立场。每个 logic_chain 包含 3-5 个步骤。"""
+如果是六级翻译，不要提供议论文立场；请提供 2-3 个翻译处理方案，
+例如“先抓主干”“处理定语/状语”“统一术语和时态”。其他写作题提供 2-3 个不同立场。
+每个 logic_chain 包含 3-5 个步骤。"""
 
     result = provider.chat_json(
         messages=[

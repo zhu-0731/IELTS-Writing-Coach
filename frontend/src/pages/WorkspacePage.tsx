@@ -15,6 +15,20 @@ function countWords(text: string): number {
   return text.trim() === '' ? 0 : text.trim().split(/\s+/).length
 }
 
+function targetWordCount(taskType: TaskType, questionType: string): number {
+  if (taskType === 'task1') return 150
+  if (questionType === 'cet6_writing') return 150
+  if (questionType === 'cet6_translation') return 90
+  return 250
+}
+
+function editorPlaceholder(taskType: TaskType, questionType: string): string {
+  if (taskType === 'task1') return c.editor.placeholder1
+  if (questionType === 'cet6_writing') return c.editor.placeholderCet6Writing
+  if (questionType === 'cet6_translation') return c.editor.placeholderCet6Translation
+  return c.editor.placeholder2
+}
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0')
   const s = (seconds % 60).toString().padStart(2, '0')
@@ -102,8 +116,8 @@ export default function WorkspacePage() {
   }, [taskType, questionType, prompt, content, essayId, elapsed, sidebarCollapsed, activeTab, leftWidth, rightWidth])
 
   const wordCount = countWords(content)
-  const targetWords = taskType === 'task1' ? 150 : 250
-  const maxWords = taskType === 'task1' ? 200 : 300
+  const targetWords = targetWordCount(taskType, questionType)
+  const maxWords = Math.max(targetWords + 50, Math.ceil(targetWords * 1.2))
   const wordProgress = Math.min(100, (wordCount / maxWords) * 100)
 
   // Global drag handlers
@@ -352,7 +366,7 @@ export default function WorkspacePage() {
               ref={editorRef}
               value={content}
               onChange={(e) => handleContentChange(e.target.value)}
-              placeholder={taskType === 'task1' ? c.editor.placeholder1 : c.editor.placeholder2}
+              placeholder={editorPlaceholder(taskType, questionType)}
               className="flex-1 w-full px-7 py-6 text-[15px] text-ink bg-transparent resize-none focus:outline-none leading-8 placeholder:text-ghost/60"
               spellCheck
             />

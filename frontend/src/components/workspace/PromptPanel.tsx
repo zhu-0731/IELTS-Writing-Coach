@@ -24,6 +24,19 @@ const REQUIREMENTS: Record<TaskType, string[]> = {
   task2: [...c.requirements.task2],
 }
 
+function getTask2Requirements(questionType: string): string[] {
+  if (questionType === 'cet6_writing') return [...c.requirements.task2Cet6Writing]
+  if (questionType === 'cet6_translation') return [...c.requirements.task2Cet6Translation]
+  return [...c.requirements.task2]
+}
+
+function getPromptPlaceholder(taskType: TaskType, questionType: string): string {
+  if (taskType === 'task1') return c.prompt.placeholder1
+  if (questionType === 'cet6_writing') return c.prompt.placeholderCet6Writing
+  if (questionType === 'cet6_translation') return c.prompt.placeholderCet6Translation
+  return c.prompt.placeholder2
+}
+
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024 // 4 MB
 
 export default function PromptPanel({
@@ -31,7 +44,7 @@ export default function PromptPanel({
   onTaskChange, onQuestionTypeChange, onPromptChange, onImageChange,
 }: Props) {
   const types = taskType === 'task1' ? TASK1_TYPES : TASK2_TYPES
-  const reqs = REQUIREMENTS[taskType]
+  const reqs = taskType === 'task2' ? getTask2Requirements(questionType) : REQUIREMENTS[taskType]
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,7 +109,7 @@ export default function PromptPanel({
           <textarea
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
-            placeholder={taskType === 'task1' ? c.prompt.placeholder1 : c.prompt.placeholder2}
+            placeholder={getPromptPlaceholder(taskType, questionType)}
             className="h-52 w-full px-3 py-2.5 text-sm border border-line rounded-input resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand leading-relaxed text-ink placeholder:text-ghost transition-colors"
           />
         </div>
