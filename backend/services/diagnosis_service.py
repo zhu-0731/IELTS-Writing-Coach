@@ -7,9 +7,6 @@ from services.provider import LLMProvider
 
 
 TASK_REVIEW = "review"
-MAX_REVIEW_CHARS = 9000
-MAX_PARAGRAPH_CHARS = 3500
-MAX_PARAGRAPH_TASKS = 8
 
 COMMON_DIMENSIONS = [
     {
@@ -98,16 +95,6 @@ def _system_prompt() -> str:
 
 def _short_error(exc: Exception) -> str:
     return str(exc)[:500] or exc.__class__.__name__
-
-
-def _clip_text(text: str, max_chars: int) -> tuple[str, bool]:
-    if len(text) <= max_chars:
-        return text, False
-    return (
-        text[:max_chars].rstrip()
-        + "\n\n[内容过长，后文已省略。本次诊断优先依据前文判断。]",
-        True,
-    )
 
 
 def _dimension_defs(task_type: str) -> list[dict]:
@@ -275,7 +262,6 @@ def _run_review_task(
     question_type: str,
     image_base64: str | None,
 ) -> dict:
-    review_content, was_clipped = _clip_text(essay_content, MAX_REVIEW_CHARS)
     dimension_json = ",\n    ".join(
         (
             f'{{"key": "{item["key"]}", "label_zh": "{item["label_zh"]}", '
@@ -292,7 +278,7 @@ def _run_review_task(
 题目：{prompt or "（未提供）"}
 
 作文全文：
-{review_content}
+{essay_content}
 
 返回 JSON：
 {{
@@ -345,10 +331,7 @@ def _run_review_task(
         "main_problems": [_normalize_problem(p) for p in result.get("main_problems", [])][:3],
         "template_misuse": str(result.get("template_misuse") or "").strip(),
         "next_training_task": str(result.get("next_training_task") or "").strip(),
-        "diagnosis_scope_note": (
-            "作文内容较长，总体评分已优先参考前文；建议按雅思标准长度提交以获得更稳定诊断。"
-            if was_clipped else ""
-        ),
+        "diagnosis_scope_note": "",
     }
 
 
@@ -362,7 +345,6 @@ def _run_paragraph_task(
     task_type: str,
     question_type: str,
 ) -> dict:
-    paragraph, _ = _clip_text(paragraph, MAX_PARAGRAPH_CHARS)
     indexed_sentences = "\n".join(
         f"S{idx}: {sentence}" for idx, sentence in enumerate(sentences)
     )
@@ -437,10 +419,7 @@ def _run_paragraph_task(
 
 
 def _all_task_keys(paragraph_count: int) -> list[str]:
-    return [TASK_REVIEW] + [
-        f"paragraph:{idx}"
-        for idx in range(min(paragraph_count, MAX_PARAGRAPH_TASKS))
-    ]
+    return [TASK_REVIEW] + [f"paragraph:{idx}" for idx in range(paragraph_count)]
 
 
 def _failed_task(key: str, label: str, exc: Exception) -> dict:
@@ -514,13 +493,7 @@ def run_diagnosis(
             if fix.get("paragraph_index") not in retried_paragraphs
         ]
 
-    if len(paragraphs) > MAX_PARAGRAPH_TASKS:
-        result["diagnosis_scope_note"] = (
-            result.get("diagnosis_scope_note")
-            or f"作文段落较多，本次逐段修改优先诊断前 {MAX_PARAGRAPH_TASKS} 段。"
-        )
-
-    for paragraph_index, paragraph in enumerate(paragraphs[:MAX_PARAGRAPH_TASKS]):
+    for paragraph_index, paragraph in enumerate(paragraphs):
         key = f"paragraph:{paragraph_index}"
         if key not in requested_keys:
             continue
