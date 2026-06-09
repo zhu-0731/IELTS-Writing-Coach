@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { copy } from '../../i18n'
+import { featureFlags, isCet6QuestionType } from '../../config/features'
 
 type TaskType = 'task1' | 'task2'
 
@@ -17,7 +18,9 @@ interface Props {
 const c = copy.workspace
 
 const TASK1_TYPES = Object.entries(c.taskTypes.task1).map(([value, label]) => ({ value, label }))
-const TASK2_TYPES = Object.entries(c.taskTypes.task2).map(([value, label]) => ({ value, label }))
+const TASK2_TYPES = Object.entries(c.taskTypes.task2)
+  .filter(([value]) => featureFlags.cet6 || !isCet6QuestionType(value))
+  .map(([value, label]) => ({ value, label }))
 
 const REQUIREMENTS: Record<TaskType, string[]> = {
   task1: [...c.requirements.task1],
@@ -25,15 +28,15 @@ const REQUIREMENTS: Record<TaskType, string[]> = {
 }
 
 function getTask2Requirements(questionType: string): string[] {
-  if (questionType === 'cet6_writing') return [...c.requirements.task2Cet6Writing]
-  if (questionType === 'cet6_translation') return [...c.requirements.task2Cet6Translation]
+  if (featureFlags.cet6 && questionType === 'cet6_writing') return [...c.requirements.task2Cet6Writing]
+  if (featureFlags.cet6 && questionType === 'cet6_translation') return [...c.requirements.task2Cet6Translation]
   return [...c.requirements.task2]
 }
 
 function getPromptPlaceholder(taskType: TaskType, questionType: string): string {
   if (taskType === 'task1') return c.prompt.placeholder1
-  if (questionType === 'cet6_writing') return c.prompt.placeholderCet6Writing
-  if (questionType === 'cet6_translation') return c.prompt.placeholderCet6Translation
+  if (featureFlags.cet6 && questionType === 'cet6_writing') return c.prompt.placeholderCet6Writing
+  if (featureFlags.cet6 && questionType === 'cet6_translation') return c.prompt.placeholderCet6Translation
   return c.prompt.placeholder2
 }
 

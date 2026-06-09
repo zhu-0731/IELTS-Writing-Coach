@@ -5,6 +5,7 @@ import { copy } from '../i18n'
 import PromptPanel from '../components/workspace/PromptPanel'
 import AISidebar from '../components/workspace/AISidebar'
 import Button from '../components/ui/Button'
+import { featureFlags, isEnabledQuestionType } from '../config/features'
 
 type TaskType = 'task1' | 'task2'
 type SidebarTab = 'hint' | 'idea' | 'expression'
@@ -17,16 +18,20 @@ function countWords(text: string): number {
 
 function targetWordCount(taskType: TaskType, questionType: string): number {
   if (taskType === 'task1') return 150
-  if (questionType === 'cet6_writing') return 150
-  if (questionType === 'cet6_translation') return 90
+  if (featureFlags.cet6 && questionType === 'cet6_writing') return 150
+  if (featureFlags.cet6 && questionType === 'cet6_translation') return 90
   return 250
 }
 
 function editorPlaceholder(taskType: TaskType, questionType: string): string {
   if (taskType === 'task1') return c.editor.placeholder1
-  if (questionType === 'cet6_writing') return c.editor.placeholderCet6Writing
-  if (questionType === 'cet6_translation') return c.editor.placeholderCet6Translation
+  if (featureFlags.cet6 && questionType === 'cet6_writing') return c.editor.placeholderCet6Writing
+  if (featureFlags.cet6 && questionType === 'cet6_translation') return c.editor.placeholderCet6Translation
   return c.editor.placeholder2
+}
+
+function normalizeQuestionType(questionType: string): string {
+  return isEnabledQuestionType(questionType) ? questionType : ''
 }
 
 function formatTime(seconds: number): string {
@@ -60,7 +65,7 @@ export default function WorkspacePage() {
   const [taskType, setTaskType] = useState<TaskType>(
     () => (sessionStorage.getItem('workspace_active_task') as TaskType | null) ?? 'task2'
   )
-  const [questionType, setQuestionType] = useState<string>(() => draft('questionType') ?? '')
+  const [questionType, setQuestionType] = useState<string>(() => normalizeQuestionType(draft('questionType') ?? ''))
   const [prompt, setPrompt] = useState<string>(() => draft('prompt') ?? '')
   const [content, setContent] = useState<string>(() => draft('content') ?? '')
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => draft('sidebarCollapsed') ?? false)
@@ -103,6 +108,12 @@ export default function WorkspacePage() {
     setSaveStatus('idle')
     requestAnimationFrame(() => editorRef.current?.focus())
   }, [location.state])
+
+  useEffect(() => {
+    if (!isEnabledQuestionType(questionType)) {
+      setQuestionType('')
+    }
+  }, [questionType])
 
   // Persist to a per-task-type slot so each task's draft is independent.
   useEffect(() => {
@@ -227,7 +238,7 @@ export default function WorkspacePage() {
     // Restore this task type's saved draft (empty defaults if none saved yet)
     const saved = getDraft(t)
     setTaskType(t)
-    setQuestionType((saved.questionType as string) ?? '')
+    setQuestionType(normalizeQuestionType((saved.questionType as string) ?? ''))
     setPrompt((saved.prompt as string) ?? '')
     setContent((saved.content as string) ?? '')
     setEssayId((saved.essayId as string | null) ?? null)

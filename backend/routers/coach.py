@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from database import get_conn
+from services.feature_flags import ensure_question_type_enabled
 from services.provider import make_provider_from_db
 from services.idea_service import generate_idea
 from services.expression_service import generate_expression
@@ -43,6 +44,10 @@ def _get_provider():
 def idea_coach(body: IdeaRequest):
     if not body.prompt.strip():
         raise HTTPException(400, "请先在左侧填写题目内容。")
+    try:
+        ensure_question_type_enabled(body.question_type)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     provider = _get_provider()
     try:
         return generate_idea(provider, body.task_type, body.question_type, body.prompt)

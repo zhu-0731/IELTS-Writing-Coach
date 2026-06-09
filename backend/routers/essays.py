@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from database import get_conn
+from services.feature_flags import ensure_question_type_enabled
 
 router = APIRouter()
 
@@ -38,6 +39,10 @@ class EssayRead(BaseModel):
 
 @router.post("/api/essays", response_model=EssayRead, status_code=201)
 def create_essay(body: EssayCreate):
+    try:
+        ensure_question_type_enabled(body.question_type or "")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     essay_id = str(uuid.uuid4())
     db = get_conn()
     db.execute(
@@ -55,6 +60,11 @@ def create_essay(body: EssayCreate):
 
 @router.put("/api/essays/{essay_id}", response_model=EssayRead)
 def update_essay(essay_id: str, body: EssayUpdate):
+    if body.question_type is not None:
+        try:
+            ensure_question_type_enabled(body.question_type)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
     db = get_conn()
     row = db.execute("SELECT * FROM essays WHERE essay_id = ?", (essay_id,)).fetchone()
     if not row:
