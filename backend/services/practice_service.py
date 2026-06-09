@@ -11,35 +11,11 @@ from services.provider import LLMProvider
 def check_answer(user_answer: str, correct_answer: str) -> bool:
     u = _normalize(user_answer)
     c = _normalize(correct_answer)
-    if u == c:
-        return True
-    # Allow minor punctuation difference
-    u2 = re.sub(r"[^\w\s'-]", '', u).strip()
-    c2 = re.sub(r"[^\w\s'-]", '', c).strip()
-    if u2 == c2:
-        return True
-    # Levenshtein ≤ 1 for single words longer than 3 chars (spelling tolerance)
-    if ' ' not in c2 and ' ' not in u2 and len(c2) > 3:
-        return _levenshtein(u2, c2) <= 1
-    return False
+    return bool(u and c and u == c)
 
 
 def _normalize(s: str) -> str:
-    return s.strip().lower().rstrip('.')
-
-
-def _levenshtein(a: str, b: str) -> int:
-    if len(a) < len(b):
-        a, b = b, a
-    if not b:
-        return len(a)
-    row = list(range(len(b) + 1))
-    for ch in a:
-        new_row = [row[0] + 1]
-        for j, dch in enumerate(b):
-            new_row.append(min(new_row[-1] + 1, row[j + 1] + 1, row[j] + (ch != dch)))
-        row = new_row
-    return row[-1]
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s'-]", "", (s or "").strip().lower())).strip()
 
 
 # ── Local fallback generation ─────────────────────────────────────────────────
