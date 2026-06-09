@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   createResource,
@@ -109,6 +109,10 @@ function matchFixToSegment(fix: DiagnosisFix, segment: TextSegment): boolean {
   return Boolean(original && (segment.text.includes(original) || original.includes(segment.text)))
 }
 
+function segmentKey(segment: TextSegment): string {
+  return `${segment.paragraphIndex}-${segment.sentenceIndex}`
+}
+
 function makeResourceDrafts(result: DiagnosisResult): ResourceDraft[] {
   const fromFixes = result.top_sentence_fixes
     .filter((fix) => (fix.resource_pattern || fix.suggestion || '').trim())
@@ -159,6 +163,8 @@ export default function DiagnosisReviewPage() {
   const [selectedFixIndex, setSelectedFixIndex] = useState(0)
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [resources, setResources] = useState<ResourceDraft[]>([])
+  const segmentRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const fixRefs = useRef<Record<number, HTMLButtonElement | null>>({})
 
   const applyDiagnosisResult = (data: DiagnosisResult) => {
     setResult(data)
@@ -241,6 +247,43 @@ export default function DiagnosisReviewPage() {
   const failedTasks = result?.failed_tasks ?? []
   const showRetryButton = Boolean(error || failedTasks.length > 0)
   const dimensionScores = result?.dimension_scores ?? []
+
+  const scrollToElement = (element: HTMLElement | null | undefined) => {
+    element?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+  }
+
+  const scrollToFix = (index: number) => {
+    scrollToElement(fixRefs.current[index])
+  }
+
+  const scrollToFixAfterRender = (index: number) => {
+    window.setTimeout(() => scrollToFix(index), 0)
+  }
+
+  const scrollToSegmentForFix = (fix: DiagnosisFix) => {
+    const segment = paragraphs
+      .flat()
+      .find((item) => matchFixToSegment(fix, item))
+    if (segment) {
+      scrollToElement(segmentRefs.current[segmentKey(segment)])
+    }
+  }
+
+  const selectFixFromCard = (index: number, fix: DiagnosisFix) => {
+    setSelectedFixIndex(index)
+    scrollToSegmentForFix(fix)
+  }
+
+  const selectFixFromSegment = (segment: TextSegment) => {
+    const index = fixes.findIndex((fix) => matchFixToSegment(fix, segment))
+    if (index < 0) return
+    const category = inferCategory(fixes[index])
+    if (activeCategory !== 'all' && activeCategory !== category) {
+      setActiveCategory(category)
+    }
+    setSelectedFixIndex(index)
+    scrollToFixAfterRender(index)
+  }
 
   const updateResource = (localId: string, patch: Partial<ResourceDraft>) => {
     setResources((prev) => prev.map((item) => (
@@ -398,10 +441,10 @@ export default function DiagnosisReviewPage() {
                   return (
                     <button
                       key={`${segment.paragraphIndex}-${segment.sentenceIndex}`}
-                      onClick={() => {
-                        const index = fixes.findIndex((fix) => matchFixToSegment(fix, segment))
-                        if (index >= 0) setSelectedFixIndex(index)
+                      ref={(node) => {
+                        segmentRefs.current[segmentKey(segment)] = node
                       }}
+                      onClick={() => selectFixFromSegment(segment)}
                       className={[
                         'w-full text-left px-3 py-2.5 rounded-card border text-sm leading-6 transition-colors',
                         active
@@ -455,7 +498,10 @@ export default function DiagnosisReviewPage() {
               visibleFixes.map(({ fix, index, category }) => (
                 <button
                   key={index}
-                  onClick={() => setSelectedFixIndex(index)}
+                  ref={(node) => {
+                    fixRefs.current[index] = node
+                  }}
+                  onClick={() => selectFixFromCard(index, fix)}
                   className={[
                     'relative w-full text-left p-4 rounded-card border transition-colors',
                     selectedFixIndex === index
